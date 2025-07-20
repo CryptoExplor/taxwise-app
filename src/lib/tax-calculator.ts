@@ -1,37 +1,34 @@
 import type { TaxComputation } from './types';
 import { taxRules } from '../config/tax-rules';
 
-// Note: This is a simplified tax calculator for AY 2024-25 (FY 2023-24)
+// Note: This is a simplified tax calculator.
 // It does not cover all edge cases and complexities of the Indian Income Tax Act.
 
 export function computeTax(
   taxableIncome: number,
   age: number,
-  regime: 'New' | 'Old' = 'New'
+  regime: 'New' | 'Old' = 'New',
+  ay: string = "2024-25"
 ): Omit<TaxComputation, 'netTaxPayable' | 'refund'> {
   let taxBeforeCess = 0;
   let rebate = 0;
-  const ay = "2024-25";
   
-  let slabsToUse;
-  let rule: any;
-
-  const ruleKey = regime === 'New' ? `${ay}-new` : ay;
-  
-  rule = taxRules[ruleKey as keyof typeof taxRules];
-
-  if (!rule) {
-    console.warn(`Tax rules for AY ${ay} and regime ${regime} not found. Using defaults.`);
-    return {
-        taxableIncome,
-        taxBeforeCess: 0,
-        rebate: 0,
-        taxAfterRebate: 0,
-        cess: 0,
-        totalTaxLiability: 0,
-    };
+  let ruleKey;
+  if (regime === "New") {
+    ruleKey = `${ay}-new`;
+  } else {
+    ruleKey = ay;
   }
   
+  let rule = taxRules[ruleKey as keyof typeof taxRules];
+
+  // Fallback if specific year/regime combo not found
+  if (!rule) {
+    console.warn(`Tax rules for AY ${ay} and regime ${regime} not found. Falling back to 2024-25 New Regime.`);
+    rule = taxRules["2024-25-new"];
+  }
+  
+  let slabsToUse = rule.slabs;
   if (regime === 'Old') {
     if (age >= 80 && rule.superSeniorSlabs) {
         slabsToUse = rule.superSeniorSlabs;
@@ -40,30 +37,17 @@ export function computeTax(
     } else {
         slabsToUse = rule.slabs;
     }
-  } else {
-      slabsToUse = rule.slabs;
-  }
-  
-  if (!slabsToUse) {
-    console.error("No valid tax slabs found for computation. Returning zero tax.");
-    return {
-        taxableIncome,
-        taxBeforeCess: 0,
-        rebate: 0,
-        taxAfterRebate: 0,
-        cess: 0,
-        totalTaxLiability: 0,
-    };
   }
 
   let prevLimit = 0;
   for (const slab of slabsToUse) {
     if (taxableIncome > prevLimit) {
-      const taxableInSlab = Math.min(taxableIncome - prevLimit, slab.limit - prevLimit);
-      taxBeforeCess += taxableInSlab * slab.rate;
+      const taxableInSlab = Math.min(taxableIncome, slab.limit) - prevLimit;
+      if (taxableInSlab > 0) {
+        taxBeforeCess += taxableInSlab * slab.rate;
+      }
       prevLimit = slab.limit;
-    } else {
-      break;
+      if (taxableIncome <= slab.limit) break;
     }
   }
 
@@ -88,13 +72,23 @@ export function computeTax(
 
 /**
  * Calculates age from a date of birth string.
- * @param {string} dobStr - Date of birth in a string format (e.g., "YYYY-MM-DD").
+ * @param {string} dobStr - Date of birth in a string format (e.g., "YYYY-MM-DD" or "DD-MM-YYYY").
  * @returns {number} The calculated age, or 30 as a default if DOB is invalid.
  */
 export function calculateAge(dobStr: string) {
-  if (!dobStr) return 30; // default age fallback for invalid DOB
-  const dob = new Date(dobStr);
-  if (isNaN(dob.getTime())) return 30;
+  if (!dobStr) return 30;
+  // Try parsing YYYY-MM-DD first, then DD-MM-YYYY
+  let dob = new Date(dobStr);
+  if (isNaN(dob.getTime())) {
+    const parts = dobStr.split('-');
+    if (parts.length === 3) {
+        // Assuming DD-MM-YYYY
+        dob = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+    }
+  }
+
+  if (isNaN(dob.getTime())) return 30; // Return default if still invalid
+
   const today = new Date();
   let age = today.getFullYear() - dob.getFullYear();
   const m = today.getMonth() - dob.getMonth();
