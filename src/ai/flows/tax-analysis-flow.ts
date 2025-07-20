@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview An AI agent for analyzing tax data and providing insights.
@@ -9,7 +10,7 @@
 
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
-import type { ClientData } from '@/lib/types';
+import type { ClientDataToSave } from '@/lib/types';
 
 const TaxAnalysisInputSchema = z.object({
   personalInfo: z.object({
@@ -46,7 +47,7 @@ const TaxAnalysisOutputSchema = z.object({
 export type TaxAnalysisOutput = z.infer<typeof TaxAnalysisOutputSchema>;
 
 
-export async function getTaxAnalysis(input: Omit<ClientData, 'id' | 'taxComputation' | 'aiSummary' | 'aiTips'>): Promise<TaxAnalysisOutput> {
+export async function getTaxAnalysis(input: Omit<ClientDataToSave, 'taxComputation' | 'aiSummary' | 'aiTips' | 'fileName' | 'createdAt'>): Promise<TaxAnalysisOutput> {
   // Map the ClientData subset to the TaxAnalysisInput schema
   const flowInput: TaxAnalysisInput = {
     personalInfo: input.personalInfo,

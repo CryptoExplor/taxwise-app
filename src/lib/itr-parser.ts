@@ -1,5 +1,5 @@
 
-import type { ClientData, TaxesPaid, PersonalInfo, Deductions, IncomeDetails } from './types';
+import type { ClientDataToSave } from './types';
 import { calculateAge, computeTax } from './tax-calculator';
 
 // Helper to safely access nested properties.
@@ -27,9 +27,9 @@ const getFromPaths = (obj: any, paths: string[], defaultValue: any = 0) => {
 /**
  * Parses various ITR JSON formats and computes a standardized summary.
  * @param {File} file - The uploaded JSON file.
- * @returns {Promise<Omit<ClientData, 'id' | 'aiSummary' | 'aiTips'>>} A structured client data object.
+ * @returns {Promise<ClientDataToSave>} A structured client data object ready to be saved.
  */
-export async function parseITR(file: File): Promise<Omit<ClientData, 'id' | 'aiSummary' | 'aiTips'>> {
+export async function parseITR(file: File): Promise<ClientDataToSave> {
   const fileContent = await file.text();
   const rawJson = JSON.parse(fileContent);
 
@@ -47,7 +47,7 @@ export async function parseITR(file: File): Promise<Omit<ClientData, 'id' | 'aiS
       ay = `${ay}-${nextYear}`;
     }
 
-    const personalInfo: PersonalInfo = {
+    const personalInfo = {
         name: `${firstName} ${middleName} ${lastName}`.replace(/\s+/g, ' ').trim() || 'N/A',
         pan: getFromPaths(jsonData, ['PersonalInfo.PAN', 'PartA_GEN1.PersonalInfo.PAN'], 'N/A'),
         assessmentYear: ay,
@@ -55,7 +55,7 @@ export async function parseITR(file: File): Promise<Omit<ClientData, 'id' | 'aiS
     };
     
     // For ITR-4, income is under ScheduleBP. For ITR-1, it's under PartB_TI.
-    const incomeDetails: IncomeDetails = {
+    const incomeDetails = {
       salary: getFromPaths(jsonData, ['IncomeFromSal', 'PartB_TI.Salaries'], 0),
       houseProperty: getFromPaths(jsonData, ['TotalIncomeOfHP', 'PartB_TI.IncomeFromHP'], 0),
       businessIncome: getFromPaths(jsonData, ['ScheduleBP.IncChargeableUnderBus', 'IncomeFromBusinessProf', 'PartB_TI.IncomeFromBP'], 0),
@@ -67,7 +67,7 @@ export async function parseITR(file: File): Promise<Omit<ClientData, 'id' | 'aiS
       grossTotalIncome: getFromPaths(jsonData, ['GrossTotIncome', 'PartB_TI.GrossTotalIncome'], 0),
     };
     
-    const deductions: Deductions = {
+    const deductions = {
       section80C: getFromPaths(jsonData, ['DeductUndChapVIA.Section80C', 'UsrDeductUndChapVIA.Section80C'], 0),
       section80D: getFromPaths(jsonData, ['DeductUndChapVIA.Section80D', 'UsrDeductUndChapVIA.Section80D'], 0),
       totalDeductions: getFromPaths(jsonData, ['DeductUndChapVIA.TotalChapVIADeductions', 'UsrDeductUndChapVIA.TotalChapVIADeductions', 'PartB_TI.TotalDeductions'], 0),
@@ -86,7 +86,7 @@ export async function parseITR(file: File): Promise<Omit<ClientData, 'id' | 'aiS
         personalInfo.assessmentYear
     );
 
-    const taxesPaid: TaxesPaid = {
+    const taxesPaid = {
       tds: (getFromPaths(jsonData, ['TDSonSalaries.TotalTDSonSalaries'], 0) + getFromPaths(jsonData, ['TDSonOthThanSals.TotalTDSonOthThanSals'], 0)),
       advanceTax: getFromPaths(jsonData, ['TaxPaid.TaxesPaid.AdvanceTax'], 0),
     };
@@ -96,6 +96,7 @@ export async function parseITR(file: File): Promise<Omit<ClientData, 'id' | 'aiS
 
     return {
       fileName: file.name,
+      createdAt: new Date(),
       personalInfo,
       incomeDetails,
       deductions,
@@ -108,12 +109,12 @@ export async function parseITR(file: File): Promise<Omit<ClientData, 'id' | 'aiS
         ...taxComputationResult,
         netTaxPayable: Math.max(0, finalAmount),
         refund: Math.max(0, -finalAmount),
-      }
+      },
+      aiSummary: '', // Initialize empty
+      aiTips: [], // Initialize empty
     };
   } catch (error) {
     console.error("Error parsing ITR JSON:", error);
     throw new Error('Failed to parse ITR JSON. The file might be invalid or in an unsupported format.');
   }
 }
-
-    

@@ -1,4 +1,5 @@
 
+import type { Timestamp } from 'firebase/firestore';
 
 export interface IncomeDetails {
   salary: number;
@@ -46,9 +47,10 @@ export interface PersonalInfo {
     age: number;
 }
 
-export interface ClientData {
-  id: string;
+// Data structure for data to be saved to Firestore
+export interface ClientDataToSave {
   fileName: string;
+  createdAt: Date;
   personalInfo: PersonalInfo;
   incomeDetails: IncomeDetails;
   deductions: Deductions;
@@ -59,4 +61,9 @@ export interface ClientData {
   aiTips?: string[];
 }
 
-    
+
+// Data structure used in the application, includes the Firestore document ID
+export interface ClientData extends ClientDataToSave {
+  id: string;
+  createdAt: Timestamp; // Firestore returns a Timestamp object
+}
