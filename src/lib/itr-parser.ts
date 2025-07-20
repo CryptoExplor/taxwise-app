@@ -1,14 +1,14 @@
-import type { ClientData, TaxesPaid, TaxComputation, PersonalInfo, Deductions, IncomeDetails } from './types';
-import { computeTax, calculateAge } from './tax-calculator';
+import type { ClientData, TaxesPaid, PersonalInfo, Deductions, IncomeDetails } from './types';
+import { calculateAge } from './tax-calculator';
 
-// This is a mock parser. In a real application, you would parse the actual ITR JSON structure.
+// Parses the ITR JSON structure.
 export async function parseITR(file: File): Promise<Omit<ClientData, 'id' | 'taxComputation' | 'aiSummary' | 'aiTips'>> {
   const fileContent = await file.text();
   const jsonData = JSON.parse(fileContent);
 
   try {
     const personalInfo: PersonalInfo = {
-      name: jsonData?.PartA_GEN1?.PersonalInfo?.AssesseeName?.FirstName + ' ' + (jsonData?.PartA_GEN1?.PersonalInfo?.AssesseeName?.MiddleName || '') + ' ' + jsonData?.PartA_GEN1?.PersonalInfo?.AssesseeName?.SurNameOrOrgName || "N/A",
+      name: `${jsonData?.PartA_GEN1?.PersonalInfo?.AssesseeName?.FirstName || ''} ${jsonData?.PartA_GEN1?.PersonalInfo?.AssesseeName?.MiddleName || ''} ${jsonData?.PartA_GEN1?.PersonalInfo?.AssesseeName?.SurNameOrOrgName || ''}`.trim() || "N/A",
       pan: jsonData?.PartA_GEN1?.PersonalInfo?.PAN || "N/A",
       assessmentYear: jsonData?.ITRForm?.AssessmentYear || "2024-25",
       age: calculateAge(jsonData?.PartA_GEN1?.PersonalInfo?.DOB),
@@ -21,8 +21,8 @@ export async function parseITR(file: File): Promise<Omit<ClientData, 'id' | 'tax
       houseProperty: jsonData?.PartB_TI?.IncomeFromHP || 0,
       businessIncome: jsonData?.PartB_TI?.IncomeFromBP || 0,
       capitalGains: {
-        shortTerm: jsonData?.ScheduleCG?.TotalSTCG || 0,
-        longTerm: jsonData?.ScheduleCG?.TotalLTCG || 0,
+        shortTerm: (jsonData?.ScheduleCG?.ShortTermCapGainFor222?.unutilizedCapGain || 0),
+        longTerm: (jsonData?.ScheduleCG?.LongTermCapGainFor222?.unutilizedCapGain || 0),
       },
       otherSources: jsonData?.PartB_TI?.IncomeFromOS || 0,
       grossTotalIncome: jsonData?.PartB_TI?.GrossTotalIncome || 0,
