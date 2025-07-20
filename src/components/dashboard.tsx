@@ -1,10 +1,10 @@
+
 "use client";
 
 import { useState, useRef, useTransition } from "react";
-import { UploadCloud, Loader, FileText, Download, Sparkles } from "lucide-react";
+import { UploadCloud, Loader, Download, Sparkles } from "lucide-react";
 import type { ClientData } from "@/lib/types";
 import { parseITR } from "@/lib/itr-parser";
-import { computeTax } from "@/lib/tax-calculator";
 import { ClientCard } from "./client-card";
 import { Button } from "./ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -41,29 +41,12 @@ export function Dashboard() {
           });
           return null;
         }
-
+        
         const parsedData = await parseITR(file);
-        
-        const taxableIncome = Math.max(0, parsedData.incomeDetails.grossTotalIncome - parsedData.deductions.totalDeductions);
-        
-        const taxComputationResult = computeTax(
-          taxableIncome,
-          parsedData.personalInfo.age,
-          parsedData.taxRegime,
-          parsedData.personalInfo.assessmentYear
-        );
-
-        const totalTaxPaid = parsedData.taxesPaid.tds + parsedData.taxesPaid.advanceTax;
-        const finalAmount = taxComputationResult.totalTaxLiability - totalTaxPaid;
         
         const newClient: ClientData = {
           ...parsedData,
           id: `${file.name}-${new Date().getTime()}`,
-          taxComputation: {
-            ...taxComputationResult,
-            netTaxPayable: Math.max(0, finalAmount),
-            refund: Math.max(0, -finalAmount),
-          },
           aiSummary: undefined,
           aiTips: undefined,
         };
@@ -89,7 +72,8 @@ export function Dashboard() {
     // AI analysis runs after initial data is displayed
     startTransition(() => {
         settledClients.forEach(client => {
-            getTaxAnalysis(client).then((aiResponse: TaxAnalysisOutput) => {
+            const { id, taxComputation, aiSummary, aiTips, ...aiInput } = client;
+            getTaxAnalysis(aiInput).then((aiResponse: TaxAnalysisOutput) => {
                 setClients(prev => prev.map(c => c.id === client.id ? { ...c, aiSummary: aiResponse.summary, aiTips: aiResponse.tips } : c));
             }).catch(err => {
                 console.error("AI analysis failed for client:", client.id, err);

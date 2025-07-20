@@ -1,99 +1,68 @@
+
 import type { ClientData, TaxesPaid, PersonalInfo, Deductions, IncomeDetails } from './types';
-import { calculateAge } from './tax-calculator';
+import { calculateAge, computeTax } from './tax-calculator';
 
 /**
- * Robustly finds a value in a nested object using a list of possible paths.
- * @param {any} data - The JSON data object.
- * @param {string[]} paths - An array of possible dot-notation paths.
- * @param {any} defaultValue - The value to return if no path is found.
- * @returns {any} The found value or the default value.
+ * Parses ITR JSON and computes a standardized summary.
+ * Supports various common ITR JSON structures.
+ * @param {File} file - The uploaded JSON file.
+ * @returns {Promise<Omit<ClientData, 'id' | 'aiSummary' | 'aiTips'>>} A structured client data object.
  */
-function getValueByPaths(data: any, paths: string[], defaultValue: any = 0): any {
-    for (const path of paths) {
-        const keys = path.split('.');
-        let value = data;
-        let found = true;
-        for (const key of keys) {
-            if (value && typeof value === 'object' && key in value) {
-                value = value[key];
-            } else {
-                found = false;
-                break;
-            }
-        }
-        if (found && value !== null && value !== undefined) {
-            // Ensure numeric values are returned as numbers
-            const numValue = Number(value);
-            return isNaN(numValue) ? value : numValue;
-        }
-    }
-    return defaultValue;
-}
-
-
-/**
- * Reduces an array of objects to a sum of a specific property.
- * Handles cases where the input might not be an array.
- * @param {any} data - The data that might be an array.
- * @param {string} key - The property to sum.
- * @returns {number} The sum of the property values.
- */
-function sumArrayProperty(data: any, key: string): number {
-    if (Array.isArray(data)) {
-        return data.reduce((sum, item) => sum + (Number(item?.[key]) || 0), 0);
-    }
-    if (data && typeof data === 'object' && key in data) {
-         return Number(data[key]) || 0;
-    }
-    return 0;
-}
-
-
-// Parses the ITR JSON structure.
-export async function parseITR(file: File): Promise<Omit<ClientData, 'id' | 'taxComputation' | 'aiSummary' | 'aiTips'>> {
+export async function parseITR(file: File): Promise<Omit<ClientData, 'id' | 'aiSummary' | 'aiTips'>> {
   const fileContent = await file.text();
   const jsonData = JSON.parse(fileContent);
 
   try {
     const personalInfo: PersonalInfo = {
-      name: [
-        getValueByPaths(jsonData, ['PartA_GEN1.PersonalInfo.AssesseeName.FirstName', 'PartA_Gen1.Name.firstName'], ''),
-        getValueByPaths(jsonData, ['PartA_GEN1.PersonalInfo.AssesseeName.MiddleName', 'PartA_Gen1.Name.middleName'], ''),
-        getValueByPaths(jsonData, ['PartA_GEN1.PersonalInfo.AssesseeName.SurNameOrOrgName', 'PartA_Gen1.Name.surNameOrOrgName'], '')
-      ].filter(Boolean).join(' ').trim() || 'N/A',
-      pan: getValueByPaths(jsonData, ['PartA_GEN1.PersonalInfo.PAN', 'PartA_Gen1.PAN'], 'N/A'),
-      assessmentYear: getValueByPaths(jsonData, ['ITRForm.AssessmentYear', 'Form_ITR1.AssessmentYear'], '2024-25'),
-      age: calculateAge(getValueByPaths(jsonData, ['PartA_GEN1.PersonalInfo.DOB', 'PartA_Gen1.DOB'], '')),
+        name: `${jsonData?.PartA_GEN1?.PersonalInfo?.AssesseeName?.FirstName || ''} ${jsonData?.PartA_GEN1?.PersonalInfo?.AssesseeName?.MiddleName || ''} ${jsonData?.PartA_GEN1?.PersonalInfo?.AssesseeName?.SurNameOrOrgName || ''}`.trim() || 'N/A',
+        pan: jsonData?.PartA_GEN1?.PersonalInfo?.PAN || 'N/A',
+        assessmentYear: jsonData?.ITRForm?.AssessmentYear || '2024-25',
+        age: calculateAge(jsonData?.PartA_GEN1?.PersonalInfo?.DOB || ""),
     };
 
-    const regime = getValueByPaths(jsonData, ['PartB_TTI.NewTaxRegime.IsOpted', 'PartB_TTI.isOptingForNewTaxRegime'], 'N') === 'Y' ? 'New' : 'Old';
+    const taxRegime = jsonData?.PartB_TTI?.NewTaxRegime?.IsOpted === "Y" ? 'New' : 'Old';
 
     const incomeDetails: IncomeDetails = {
-      salary: getValueByPaths(jsonData, ['PartB_TI.Salaries', 'PartBTI.Salaries', 'IncomeDeductions.Salaries']),
-      houseProperty: getValueByPaths(jsonData, ['PartB_TI.IncomeFromHP', 'PartBTI.IncomeFromHP', 'IncomeDeductions.IncomeFromHP']),
-      businessIncome: getValueByPaths(jsonData, ['PartB_TI.IncomeFromBP', 'PartBTI.IncomeFromBP', 'IncomeDeductions.IncomeFromBP']),
+      salary: jsonData?.PartB_TI?.Salaries || 0,
+      houseProperty: jsonData?.PartB_TI?.IncomeFromHP || 0,
+      businessIncome: jsonData?.PartB_TI?.IncomeFromBP || 0,
       capitalGains: {
-        shortTerm: getValueByPaths(jsonData, ['ScheduleCG.ShortTermCapGain.TotalShortTermCapGain', 'ScheduleCG.TotalSTCG']),
-        longTerm: getValueByPaths(jsonData, ['ScheduleCG.LongTermCapGain.TotalLongTermCapGain', 'ScheduleCG.TotalLTCG']),
+        shortTerm: jsonData?.ScheduleCG?.ShortTermCapGain?.TotalShortTermCapGain || 0,
+        longTerm: jsonData?.ScheduleCG?.LongTermCapGain?.TotalLongTermCapGain || 0,
       },
-      otherSources: getValueByPaths(jsonData, ['PartB_TI.IncomeFromOS', 'PartBTI.IncomeFromOS', 'IncomeDeductions.IncomeFromOS']),
-      grossTotalIncome: getValueByPaths(jsonData, ['PartB_TI.GrossTotalIncome', 'PartBTI.GrossTotalIncome', 'IncomeDeductions.GrossTotalIncome']),
+      otherSources: jsonData?.PartB_TI?.IncomeFromOS || 0,
+      grossTotalIncome: jsonData?.PartB_TI?.GrossTotalIncome || 0,
     };
     
-    const deductions: Deductions = {
-      section80C: getValueByPaths(jsonData, ['Deductions.UsrDeductUndChapVIA.Section80C', 'ChapterVIA.Deduction.Section80C']),
-      section80D: getValueByPaths(jsonData, ['Deductions.UsrDeductUndChapVIA.Section80D', 'ChapterVIA.Deduction.Section80D']),
-      totalDeductions: getValueByPaths(jsonData, ['PartB_TI.TotalDeductions', 'PartBTI.TotalDeductions', 'IncomeDeductions.TotalDeductions']),
-    };
-    
-    const tdsSalaryData = getValueByPaths(jsonData, ['TaxPayments.TdsOnSalary', 'TaxPaid.TDSonSalaries'], []);
-    const tdsOtherData = getValueByPaths(jsonData, ['TaxPayments.TdsOnOthThanSal', 'TaxPaid.TDSonOthThanSals'], []);
-    const advanceTaxData = getValueByPaths(jsonData, ['TaxPayments.AdvanceTax', 'TaxPaid.AdvanceTax'], []);
+    const totalDeductions = jsonData?.PartB_TI?.TotalDeductions || 0;
 
-    const taxesPaid: TaxesPaid = {
-      tds: sumArrayProperty(tdsSalaryData, 'TotalTDSonSalaries') + sumArrayProperty(tdsOtherData, 'TotalTDSonOthThanSals'),
-      advanceTax: sumArrayProperty(advanceTaxData, 'Amt'),
+    const deductions: Deductions = {
+      section80C: jsonData?.Deductions?.UsrDeductUndChapVIA?.Section80C || 0,
+      section80D: jsonData?.Deductions?.UsrDeductUndChapVIA?.Section80D || 0,
+      totalDeductions: totalDeductions,
     };
+
+    const taxableIncome = Math.max(0, incomeDetails.grossTotalIncome - totalDeductions);
+    
+    const taxComputationResult = computeTax(
+        taxableIncome,
+        personalInfo.age,
+        taxRegime,
+        personalInfo.assessmentYear
+    );
+
+    const tdsData = jsonData?.TaxPayments?.TdsOnSalary;
+    const tdsOthersData = jsonData?.TaxPayments?.TdsOnOthThanSal;
+    const advanceTaxData = jsonData?.TaxPayments?.AdvanceTax;
+    
+    const taxesPaid: TaxesPaid = {
+      tds: (Array.isArray(tdsData) ? tdsData.reduce((sum, item) => sum + (item.TotalTDSonSalaries || 0), 0) : 0) + 
+           (Array.isArray(tdsOthersData) ? tdsOthersData.reduce((sum, item) => sum + (item.TotalTDSonOthThanSals || 0), 0) : 0),
+      advanceTax: Array.isArray(advanceTaxData) ? advanceTaxData.reduce((sum, item) => sum + (item.Amt || 0), 0) : 0,
+    };
+
+    const totalTaxPaid = taxesPaid.tds + taxesPaid.advanceTax;
+    const finalAmount = taxComputationResult.totalTaxLiability - totalTaxPaid;
 
     return {
       fileName: file.name,
@@ -101,7 +70,12 @@ export async function parseITR(file: File): Promise<Omit<ClientData, 'id' | 'tax
       incomeDetails,
       deductions,
       taxesPaid,
-      taxRegime: regime
+      taxRegime: taxRegime,
+      taxComputation: {
+        ...taxComputationResult,
+        netTaxPayable: Math.max(0, finalAmount),
+        refund: Math.max(0, -finalAmount),
+      }
     };
   } catch (error) {
     console.error("Error parsing ITR JSON:", error);

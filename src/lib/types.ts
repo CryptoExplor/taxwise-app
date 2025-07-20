@@ -1,3 +1,4 @@
+
 export interface IncomeDetails {
   salary: number;
   houseProperty: number;
@@ -21,16 +22,20 @@ export interface TaxesPaid {
   advanceTax: number;
 }
 
-export interface TaxComputation {
+export interface TaxComputationResult {
   taxableIncome: number;
   taxBeforeCess: number;
   rebate: number;
   taxAfterRebate: number;
   cess: number;
   totalTaxLiability: number;
+}
+
+export interface TaxComputation extends TaxComputationResult {
   netTaxPayable: number;
   refund: number;
 }
+
 
 export interface PersonalInfo {
     name: string;

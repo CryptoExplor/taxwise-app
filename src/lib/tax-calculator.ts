@@ -1,4 +1,4 @@
-import type { TaxComputation } from './types';
+import type { TaxComputationResult } from './types';
 import { taxRules } from '../config/tax-rules';
 
 // Note: This is a simplified tax calculator.
@@ -9,7 +9,7 @@ export function computeTax(
   age: number,
   regime: 'New' | 'Old' = 'New',
   ay: string = "2024-25"
-): Omit<TaxComputation, 'netTaxPayable' | 'refund'> {
+): TaxComputationResult {
   let taxBeforeCess = 0;
   let rebate = 0;
   
