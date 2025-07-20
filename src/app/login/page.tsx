@@ -38,6 +38,7 @@ const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
   const [isRegister, setIsRegister] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -98,6 +99,7 @@ export default function LoginPage() {
         );
         const uid = userCred.user.uid;
         await setDoc(doc(db, "users", uid), {
+          name: name,
           email,
           plan: "free",
           createdAt: new Date(),
@@ -142,6 +144,20 @@ export default function LoginPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6 p-6">
+            {isRegister && (
+              <div className="space-y-2 text-left">
+                <Label htmlFor="name">Full Name</Label>
+                <Input
+                  id="name"
+                  type="text"
+                  placeholder="John Doe"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  disabled={loading || googleLoading}
+                />
+              </div>
+            )}
             <div className="space-y-2 text-left">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -159,6 +175,7 @@ export default function LoginPage() {
               <Input
                 id="password"
                 type="password"
+                placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
