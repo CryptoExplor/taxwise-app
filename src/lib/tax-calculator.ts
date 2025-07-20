@@ -1,4 +1,5 @@
 import type { TaxComputation } from './types';
+import { taxRules } from '../config/tax-rules';
 
 // Note: This is a simplified tax calculator for AY 2024-25 (FY 2023-24)
 // It does not cover all edge cases and complexities of the Indian Income Tax Act.
@@ -11,54 +12,68 @@ export function computeTax(
 ): Omit<TaxComputation, 'netTaxPayable' | 'refund'> {
   let taxBeforeCess = 0;
   let rebate = 0;
+  const ay = "2024-25";
+  
+  let slabsToUse;
+  let rule: any;
 
-  if (regime === 'New') {
-    if (taxableIncome > 1500000) {
-      taxBeforeCess = 150000 + (taxableIncome - 1500000) * 0.30;
-    } else if (taxableIncome > 1200000) {
-      taxBeforeCess = 90000 + (taxableIncome - 1200000) * 0.20;
-    } else if (taxableIncome > 900000) {
-      taxBeforeCess = 45000 + (taxableIncome - 900000) * 0.15;
-    } else if (taxableIncome > 600000) {
-      taxBeforeCess = 15000 + (taxableIncome - 600000) * 0.10;
-    } else if (taxableIncome > 300000) {
-      taxBeforeCess = (taxableIncome - 300000) * 0.05;
+  const ruleKey = regime === 'New' ? `${ay}-new` : ay;
+  
+  rule = taxRules[ruleKey as keyof typeof taxRules];
+
+  if (!rule) {
+    console.warn(`Tax rules for AY ${ay} and regime ${regime} not found. Using defaults.`);
+    return {
+        taxableIncome,
+        taxBeforeCess: 0,
+        rebate: 0,
+        taxAfterRebate: 0,
+        cess: 0,
+        totalTaxLiability: 0,
+    };
+  }
+  
+  if (regime === 'Old') {
+    if (age >= 80 && rule.superSeniorSlabs) {
+        slabsToUse = rule.superSeniorSlabs;
+    } else if (age >= 60 && rule.seniorSlabs) {
+        slabsToUse = rule.seniorSlabs;
     } else {
-      taxBeforeCess = 0;
+        slabsToUse = rule.slabs;
     }
+  } else {
+      slabsToUse = rule.slabs;
+  }
+  
+  if (!slabsToUse) {
+    console.error("No valid tax slabs found for computation. Returning zero tax.");
+    return {
+        taxableIncome,
+        taxBeforeCess: 0,
+        rebate: 0,
+        taxAfterRebate: 0,
+        cess: 0,
+        totalTaxLiability: 0,
+    };
+  }
 
-    // Rebate under section 87A for New Regime
-    if (taxableIncome <= 700000) {
-      rebate = Math.min(taxBeforeCess, 25000);
+  let prevLimit = 0;
+  for (const slab of slabsToUse) {
+    if (taxableIncome > prevLimit) {
+      const taxableInSlab = Math.min(taxableIncome - prevLimit, slab.limit - prevLimit);
+      taxBeforeCess += taxableInSlab * slab.rate;
+      prevLimit = slab.limit;
+    } else {
+      break;
     }
-  } else { // Old Regime Logic
-    let exemptionLimit = 250000;
-    if (age >= 80) {
-      exemptionLimit = 500000;
-    } else if (age >= 60) {
-      exemptionLimit = 300000;
-    }
+  }
 
-    if (taxableIncome > exemptionLimit) {
-        if (taxableIncome <= 500000) {
-            taxBeforeCess = (taxableIncome - exemptionLimit) * 0.05;
-        } else if (taxableIncome <= 1000000) {
-            taxBeforeCess = (500000 - exemptionLimit) * 0.05 + (taxableIncome - 500000) * 0.20;
-            if (exemptionLimit > 250000) taxBeforeCess = 10000 + (taxableIncome - 500000) * 0.20;
-        } else {
-            taxBeforeCess = (500000 - exemptionLimit) * 0.05 + (1000000-500000)*0.20 + (taxableIncome - 1000000) * 0.30;
-            if (exemptionLimit > 250000) taxBeforeCess = 10000 + 100000 + (taxableIncome - 1000000) * 0.30;
-        }
-    }
-
-    // Rebate under section 87A for Old Regime
-    if (taxableIncome <= 500000) {
-      rebate = Math.min(taxBeforeCess, 12500);
-    }
+  if (rule.rebate87A && taxableIncome <= rule.rebate87A.limit) {
+    rebate = Math.min(taxBeforeCess, rule.rebate87A.maxRebate);
   }
   
   const taxAfterRebate = Math.max(0, taxBeforeCess - rebate);
-  const cess = taxAfterRebate * 0.04;
+  const cess = taxAfterRebate * (rule.cessRate || 0.04);
   const totalTaxLiability = taxAfterRebate + cess;
 
   return {
