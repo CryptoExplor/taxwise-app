@@ -1,33 +1,37 @@
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     // Function to check if the authenticated user is an administrator.
-    // This relies on a specific email address for simplicity.
+    // IMPORTANT: For production, consider a more robust role management system
+    // (e.g., a 'role' field in user documents) instead of hardcoding an email.
     function isAdmin() {
-      // NOTE: For this to work, you will need to manually give a user an 'admin' role
-      // or change this to check for a specific email address.
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.plan == 'admin';
+      return request.auth.token.email == 'admin@example.com';
+    }
+
+    // Function to check if the authenticated user has a 'lifetime' role.
+    function isLifetimeUser() {
+      return get(/databases/$(database)/documents/artifacts/$(__app_id)/users/$(request.auth.uid)).data.role == 'lifetime';
     }
 
     // Function to check if the authenticated user is an employee of a specific CA user.
     // This assumes a 'employees' subcollection where employee UIDs are stored under the CA's user document.
     function isEmployeeOf(caUserId) {
-      return exists(/databases/$(database)/documents/users/$(caUserId)/employees/$(request.auth.uid));
+      return exists(/databases/$(database)/documents/artifacts/$(__app_id)/users/$(caUserId)/employees/$(request.auth.uid));
     }
 
     // User document access rules
-    match /users/{userId} {
+    match /artifacts/{appId}/users/{userId} {
       // Users can read/write their own user document.
       // Admins can read/write any user document.
       allow read, update: if request.auth.uid == userId || isAdmin();
-      // Allow any authenticated user to create their own doc on first login
-      allow create: if request.auth != null;
+      // Only admins can create new user documents with specific roles (e.g., setting 'admin' role)
+      // For user self-registration, the client-side code will set 'user' role.
+      allow create: if request.auth != null; // Allow any authenticated user to create their own doc on first login
     }
 
     // Clients subcollection access rules
-    match /users/{userId}/clients/{clientId} {
+    match /artifacts/{appId}/users/{userId}/clients/{clientId} {
       // Allow read/write if:
       // 1. The user is the owner (userId).
       // 2. The user is an admin.
@@ -36,10 +40,15 @@ service cloud.firestore {
     }
 
     // Employees subcollection access rules (for CA users to manage their employees)
-    match /users/{caUserId}/employees/{employeeId} {
+    match /artifacts/{appId}/users/{caUserId}/employees/{employeeId} {
       // CA user can manage their own employees.
       // Admins can manage any employee.
       allow read, write: if request.auth.uid == caUserId || isAdmin();
+    }
+
+    // Admin config collection (if you have global settings managed by admin)
+    match /artifacts/{appId}/config/{docId} {
+      allow read, write: if isAdmin();
     }
   }
 }
