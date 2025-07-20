@@ -9,7 +9,7 @@ import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { User, Calculator, LogOut } from "lucide-react";
+import { User, Calculator, LogOut, Tags } from "lucide-react";
 import { LandingPage } from "@/components/landing-page";
 
 export default function Home() {
@@ -37,6 +37,11 @@ export default function Home() {
           <nav className="flex items-center gap-2">
              {user ? (
                 <>
+                  <Button variant="ghost" asChild>
+                    <Link href="/pricing">
+                        <Tags className="mr-2 h-4 w-4" /> Pricing
+                    </Link>
+                  </Button>
                   <Button variant="ghost" asChild>
                     <Link href="/calculator">
                         <Calculator className="mr-2 h-4 w-4" /> Calculator

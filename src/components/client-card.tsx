@@ -22,9 +22,11 @@ import {
   ArrowDown,
   Sparkles,
   Lightbulb,
+  RefreshCw,
+  Loader,
 } from "lucide-react";
 import { generatePDF } from "@/lib/pdf-exporter";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { Badge } from "./ui/badge";
 import {
   Accordion,
@@ -32,6 +34,11 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { useAuth } from "./auth-provider";
+import { useToast } from "@/hooks/use-toast";
+import { getTaxAnalysis } from "@/ai/flows/tax-analysis-flow";
+import { doc, updateDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 
 interface ClientCardProps {
@@ -39,13 +46,41 @@ interface ClientCardProps {
 }
 
 export function ClientCard({ client }: ClientCardProps) {
+  const { user, userProfile } = useAuth();
+  const { toast } = useToast();
   const { personalInfo, incomeDetails, deductions, taxesPaid, taxComputation, taxRegime, aiSummary, aiTips } = client;
   const [isExporting, setIsExporting] = useState(false);
+  const [isRefreshing, startTransition] = useTransition();
 
   const handleExport = async () => {
     setIsExporting(true);
     await generatePDF(client);
     setIsExporting(false);
+  };
+
+  const handleRefreshAnalysis = () => {
+    if (!user) return;
+    startTransition(async () => {
+        try {
+            const { taxComputation, aiSummary, aiTips, ...aiInput } = client;
+            const aiResponse = await getTaxAnalysis(aiInput);
+            await updateDoc(doc(db, `users/${user.uid}/clients`, client.id), {
+                aiSummary: aiResponse.summary,
+                aiTips: aiResponse.tips
+            });
+            toast({
+                title: "AI Analysis Refreshed",
+                description: "The summary and tips have been updated.",
+            });
+        } catch (err) {
+            console.error("AI analysis failed for client:", client.id, err);
+            toast({
+                variant: "destructive",
+                title: "AI Analysis Failed",
+                description: `Could not refresh AI insights for ${client.fileName}.`,
+            });
+        }
+    });
   };
 
   const SummaryItem = ({ label, value }: { label: string; value: string | number }) => (
@@ -54,6 +89,8 @@ export function ClientCard({ client }: ClientCardProps) {
       <p className="font-medium">{typeof value === 'number' ? formatCurrency(value) : value}</p>
     </div>
   );
+  
+  const canRefresh = userProfile && ['family', 'pro', 'agency', 'admin'].includes(userProfile.plan);
 
   return (
     <Card className="flex flex-col hover:shadow-lg transition-shadow duration-300">
@@ -135,6 +172,14 @@ export function ClientCard({ client }: ClientCardProps) {
                             <ul className="list-disc pl-5 space-y-1 text-sm">
                                 {aiTips.map((tip, index) => <li key={index}>{tip}</li>)}
                             </ul>
+                        </div>
+                    )}
+                     {canRefresh && (
+                        <div className="pt-2 text-right">
+                            <Button variant="ghost" size="sm" onClick={handleRefreshAnalysis} disabled={isRefreshing}>
+                                {isRefreshing ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                                {isRefreshing ? "Refreshing..." : "Refresh AI Analysis"}
+                            </Button>
                         </div>
                     )}
                  </div>

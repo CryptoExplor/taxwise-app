@@ -3,31 +3,50 @@
 
 import { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, type User } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import { Loader } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
+import { doc, getDoc } from 'firebase/firestore';
+
+interface UserProfile {
+    email: string;
+    name: string;
+    plan: 'free' | 'family' | 'pro' | 'agency' | 'admin';
+    phone?: string;
+    address?: string;
+}
 
 interface AuthContextType {
   user: User | null;
+  userProfile: UserProfile | null;
   loading: boolean;
 }
 
-const AuthContext = createContext<AuthContextType>({ user: null, loading: true });
+const AuthContext = createContext<AuthContextType>({ user: null, userProfile: null, loading: true });
 
-// List of routes that are publicly accessible
-const publicRoutes = ['/login'];
-const protectedRoutes = ['/', '/profile', '/admin'];
+const publicRoutes = ['/login', '/pricing'];
+const protectedRoutes = ['/', '/profile', '/admin', '/calculator'];
 
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
+      if (currentUser) {
+        const userDocRef = doc(db, 'users', currentUser.uid);
+        const userDoc = await getDoc(userDocRef);
+        if (userDoc.exists()) {
+          setUserProfile(userDoc.data() as UserProfile);
+        }
+      } else {
+        setUserProfile(null);
+      }
       setLoading(false);
     });
 
@@ -37,23 +56,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     if (loading) return;
 
-    const isPublicRoute = publicRoutes.includes(pathname);
+    const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
     const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route));
     
-    // If not authenticated and on a protected route, redirect to login
     if (!user && isProtectedRoute) {
       router.push('/login');
     } 
-    // If authenticated and on a public route (like login), redirect to home
-    else if (user && isPublicRoute) {
+    else if (user && pathname === '/login') {
       router.push('/');
     }
 
   }, [user, loading, pathname, router]);
 
-
-  // Show loading screen while auth state is being determined,
-  // or if user is being redirected away from a protected route.
   if (loading || (!user && protectedRoutes.some(route => pathname.startsWith(route)))) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
@@ -66,7 +80,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading }}>
+    <AuthContext.Provider value={{ user, userProfile, loading }}>
       {children}
     </AuthContext.Provider>
   );
