@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { computeTax, calculateAge } from '@/lib/tax-calculator';
+import { computeTax } from '@/lib/tax-calculator';
 import { formatCurrency } from '@/lib/utils';
 import { ArrowLeft, Calculator as CalculatorIcon, ReceiptText, Landmark } from 'lucide-react';
 import Link from 'next/link';
@@ -21,7 +21,12 @@ const calculatorSchema = z.object({
     totalDeductions: z.number().min(0, "Deductions must be a positive number."),
     taxRegime: z.enum(['Old', 'New']),
     age: z.number().min(18, "Age must be at least 18.").max(120, "Please enter a valid age."),
-}).refine(data => data.grossTotalIncome >= data.totalDeductions, {
+}).refine(data => {
+    if (data.taxRegime === 'Old') {
+      return data.grossTotalIncome >= data.totalDeductions;
+    }
+    return true;
+}, {
     message: "Deductions cannot exceed gross income.",
     path: ["totalDeductions"],
 });
@@ -77,11 +82,11 @@ export default function TaxCalculatorPage() {
     return (
         <div className="container mx-auto max-w-4xl py-12 px-4">
              <div className="mb-8">
-                <Link href="/">
-                    <Button variant="outline">
+                <Button variant="outline" asChild>
+                    <Link href="/">
                         <ArrowLeft className="mr-2 h-4 w-4" /> Back to Dashboard
-                    </Button>
-                </Link>
+                    </Link>
+                </Button>
             </div>
             <div className="grid md:grid-cols-2 gap-8">
                 <Card>
@@ -143,10 +148,10 @@ export default function TaxCalculatorPage() {
                                     name="totalDeductions"
                                     control={control}
                                     render={({ field }) => (
-                                        <Input {...field} type="number" id="totalDeductions" placeholder="e.g., 150000" disabled={taxRegime === 'New'} onChange={e => field.onChange(e.target.valueAsNumber)} />
+                                        <Input {...field} type="number" id="totalDeductions" placeholder="e.g., 150000" disabled={taxRegime === 'New'} onChange={e => field.onChange(e.target.valueAsNumber || 0)} value={taxRegime === 'New' ? 0 : field.value} />
                                     )}
                                 />
-                                 {taxRegime === 'New' && <p className="text-xs text-muted-foreground">Deductions are not applicable under the New Regime.</p>}
+                                 {taxRegime === 'New' && <p className="text-xs text-muted-foreground">Deductions are generally not applicable under the New Regime.</p>}
                                 {errors.totalDeductions && <p className="text-sm text-destructive">{errors.totalDeductions.message}</p>}
                             </div>
                         </CardContent>

@@ -51,11 +51,14 @@ export function computeTax(
     }
   }
 
+  // Rebate calculation should happen before cess is applied
+  const taxAfterRebateBeforeCess = taxBeforeCess;
+
   if (rule.rebate87A && taxableIncome <= rule.rebate87A.limit) {
-    rebate = Math.min(taxBeforeCess, rule.rebate87A.maxRebate);
+    rebate = Math.min(taxAfterRebateBeforeCess, rule.rebate87A.maxRebate);
   }
   
-  const taxAfterRebate = Math.max(0, taxBeforeCess - rebate);
+  const taxAfterRebate = Math.max(0, taxAfterRebateBeforeCess - rebate);
   const cess = taxAfterRebate * (rule.cessRate || 0.04);
   const totalTaxLiability = taxAfterRebate + cess;
 
