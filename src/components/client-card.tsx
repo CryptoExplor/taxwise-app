@@ -48,10 +48,10 @@ export function ClientCard({ client }: ClientCardProps) {
     setIsExporting(false);
   };
 
-  const SummaryItem = ({ label, value }: { label: string; value: string }) => (
+  const SummaryItem = ({ label, value }: { label: string; value: string | number }) => (
     <div className="flex justify-between items-center text-sm py-2">
       <p className="text-muted-foreground">{label}</p>
-      <p className="font-medium">{value}</p>
+      <p className="font-medium">{typeof value === 'number' ? formatCurrency(value) : value}</p>
     </div>
   );
 
@@ -86,19 +86,19 @@ export function ClientCard({ client }: ClientCardProps) {
                   <ReceiptText className="w-5 h-5 text-accent" /> Tax Computation
                 </div>
               </AccordionTrigger>
-              <AccordionContent className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2">
+              <AccordionContent className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 pt-2">
                 <div>
                   <h3 className="font-headline text-md font-semibold flex items-center gap-2 mb-2 text-muted-foreground">
                     <Landmark className="w-4 h-4" /> Income & Deductions
                   </h3>
                   <Separator />
-                  <SummaryItem label="Gross Total Income" value={formatCurrency(incomeDetails.grossTotalIncome)} />
+                  <SummaryItem label="Gross Total Income" value={incomeDetails.grossTotalIncome} />
                   <Separator />
-                  <SummaryItem label="Total Deductions" value={formatCurrency(deductions.totalDeductions)} />
+                  <SummaryItem label="Total Deductions" value={deductions.totalDeductions} />
                   <Separator />
-                   <div className="flex justify-between items-center py-2 text-sm">
+                   <div className="flex justify-between items-center py-2">
                       <p className="text-muted-foreground">Net Taxable Income</p>
-                      <p className="font-semibold text-primary">{formatCurrency(taxComputation.taxableIncome)}</p>
+                      <p className="font-semibold text-lg text-primary">{formatCurrency(taxComputation.taxableIncome)}</p>
                   </div>
                 </div>
 
@@ -107,11 +107,11 @@ export function ClientCard({ client }: ClientCardProps) {
                     <ReceiptText className="w-4 h-4" /> Tax Summary
                   </h3>
                   <Separator />
-                  <SummaryItem label="Tax before Cess" value={formatCurrency(taxComputation.taxBeforeCess)} />
+                  <SummaryItem label="Tax before Cess" value={taxComputation.taxBeforeCess} />
                   <Separator />
-                  <SummaryItem label="Rebate" value={formatCurrency(taxComputation.rebate)} />
-                  <Separator />
-                  <SummaryItem label="Taxes Paid (TDS + Adv.)" value={formatCurrency(taxesPaid.totalTaxPaid)} />
+                  <SummaryItem label="Rebate u/s 87A" value={taxComputation.rebate} />
+                   <Separator />
+                  <SummaryItem label="Taxes Paid (TDS, etc.)" value={taxesPaid.totalTaxPaid} />
                 </div>
               </AccordionContent>
             </AccordionItem>
@@ -122,7 +122,7 @@ export function ClientCard({ client }: ClientCardProps) {
                 </div>
               </AccordionTrigger>
               <AccordionContent>
-                 <div className="space-y-4">
+                 <div className="space-y-4 pt-2">
                     {aiSummary ? (
                          <p className="text-sm text-foreground/90 italic border-l-2 border-accent pl-3">{aiSummary}</p>
                     ): (

@@ -54,29 +54,44 @@ export async function parseITR(file: File): Promise<ClientDataToSave> {
         age: calculateAge(getFromPaths(jsonData, ['PersonalInfo.DOB', 'PartA_GEN1.PersonalInfo.DOB'], "")),
     };
     
-    // For ITR-4, income is under ScheduleBP. For ITR-1, it's under PartB_TI.
     const incomeDetails = {
-      salary: getFromPaths(jsonData, ['IncomeFromSal', 'PartB_TI.Salaries'], 0),
-      houseProperty: getFromPaths(jsonData, ['TotalIncomeOfHP', 'PartB_TI.IncomeFromHP'], 0),
-      businessIncome: getFromPaths(jsonData, ['ScheduleBP.IncChargeableUnderBus', 'IncomeFromBusinessProf', 'PartB_TI.IncomeFromBP'], 0),
+      salary: get(jsonData, 'PartB_TI.Salaries', 0),
+      houseProperty: get(jsonData, 'PartB_TI.IncomeFromHP', 0),
+      businessIncome: get(jsonData, 'PartB_TI.IncomeFromBP', 0),
       capitalGains: {
-        shortTerm: getFromPaths(jsonData, ['ScheduleCG.ShortTermCapGain.TotalShortTermCapGain'], 0),
-        longTerm: getFromPaths(jsonData, ['ScheduleCG.LongTermCapGain.TotalLongTermCapGain'], 0),
+        shortTerm: get(jsonData, 'ScheduleCG.ShortTermCapGain.TotalShortTermCapGain', 0),
+        longTerm: get(jsonData, 'ScheduleCG.LongTermCapGain.TotalLongTermCapGain', 0),
       },
-      otherSources: getFromPaths(jsonData, ['IncomeOthSrc', 'PartB_TI.IncomeFromOS'], 0),
-      grossTotalIncome: getFromPaths(jsonData, ['GrossTotIncome', 'PartB_TI.GrossTotalIncome'], 0),
+      otherSources: get(jsonData, 'PartB_TI.IncomeFromOS', 0),
+      grossTotalIncome: get(jsonData, 'PartB_TI.GrossTotalIncome', 0),
     };
+
+     // Gross Total Income is sometimes at a different path or needs calculation
+    if (incomeDetails.grossTotalIncome === 0) {
+        incomeDetails.grossTotalIncome = get(jsonData, 'GrossTotIncome',
+            incomeDetails.salary +
+            incomeDetails.houseProperty +
+            incomeDetails.businessIncome +
+            incomeDetails.capitalGains.shortTerm +
+            incomeDetails.capitalGains.longTerm +
+            incomeDetails.otherSources
+        );
+    }
     
     const deductions = {
-      section80C: getFromPaths(jsonData, ['DeductUndChapVIA.Section80C', 'UsrDeductUndChapVIA.Section80C'], 0),
-      section80D: getFromPaths(jsonData, ['DeductUndChapVIA.Section80D', 'UsrDeductUndChapVIA.Section80D'], 0),
-      totalDeductions: getFromPaths(jsonData, ['DeductUndChapVIA.TotalChapVIADeductions', 'UsrDeductUndChapVIA.TotalChapVIADeductions', 'PartB_TI.TotalDeductions'], 0),
+      section80C: get(jsonData, 'DeductUndChapVIA.Section80C', 0),
+      section80D: get(jsonData, 'DeductUndChapVIA.Section80D', 0),
+      totalDeductions: get(jsonData, 'PartB_TI.TotalDeductions', 0),
     };
+
+    if (deductions.totalDeductions === 0) {
+        deductions.totalDeductions = get(jsonData, 'DeductUndChapVIA.TotalChapVIADeductions', 0)
+    }
     
     const taxRegime = getFromPaths(jsonData, ['FilingStatus.NewTaxRegime'], 'N') === 'Y' ? 'New' : 'Old';
     
-    const taxableIncome = getFromPaths(jsonData, ['IncomeDeductions.TotalIncome', 'PartB_TTI.TotalTaxableIncome'], 
-      Math.max(0, incomeDetails.grossTotalIncome - deductions.totalDeductions)
+    const taxableIncome = getFromPaths(jsonData, ['PartB_TTI.TaxableTotalIncome', 'TotalTaxableIncome'],
+       Math.max(0, incomeDetails.grossTotalIncome - deductions.totalDeductions)
     );
 
     const taxComputationResult = computeTax(
@@ -87,11 +102,15 @@ export async function parseITR(file: File): Promise<ClientDataToSave> {
     );
 
     const taxesPaid = {
-      tds: (getFromPaths(jsonData, ['TDSonSalaries.TotalTDSonSalaries'], 0) + getFromPaths(jsonData, ['TDSonOthThanSals.TotalTDSonOthThanSals'], 0)),
-      advanceTax: getFromPaths(jsonData, ['TaxPaid.TaxesPaid.AdvanceTax'], 0),
+      tds: get(jsonData, 'TaxPayments.TDS', 0),
+      advanceTax: get(jsonData, 'TaxPayments.AdvanceTax', 0),
     };
+    taxesPaid.tds = getFromPaths(jsonData, ['TaxPayments.TDS'], (get(jsonData, 'TDSonSalaries.TotalTDSonSalaries', 0) + get(jsonData, 'TDSonOthThanSals.TotalTDSonOthThanSals', 0)));
+    taxesPaid.advanceTax = getFromPaths(jsonData, ['TaxPayments.AdvanceTax'], get(jsonData, 'TaxPaid.TaxesPaid.AdvanceTax', 0));
+    
+    const totalTaxPaid = getFromPaths(jsonData, ['TaxPayments.TotalTaxesPaid'], taxesPaid.tds + taxesPaid.advanceTax + get(jsonData, 'TaxPaid.TaxesPaid.SelfAssessmentTax', 0));
 
-    const totalTaxPaid = taxesPaid.tds + taxesPaid.advanceTax + getFromPaths(jsonData, ['TaxPaid.TaxesPaid.SelfAssessmentTax'], 0);
+
     const finalAmount = taxComputationResult.totalTaxLiability - totalTaxPaid;
 
     return {
@@ -107,6 +126,7 @@ export async function parseITR(file: File): Promise<ClientDataToSave> {
       taxRegime: taxRegime,
       taxComputation: {
         ...taxComputationResult,
+        taxableIncome: taxableIncome,
         netTaxPayable: Math.max(0, finalAmount),
         refund: Math.max(0, -finalAmount),
       },
