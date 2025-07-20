@@ -24,7 +24,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType>({ user: null, userProfile: null, loading: true });
 
-const publicRoutes = ['/login', '/pricing'];
+const publicRoutes = ['/login', '/pricing', '/contact'];
 const protectedRoutes = ['/', '/profile', '/admin', '/calculator'];
 
 
