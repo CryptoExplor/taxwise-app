@@ -176,6 +176,8 @@ export function Dashboard() {
         </div>
       )}
 
+      <input id="file-upload-main" type="file" className="hidden" ref={fileInputRef} onChange={handleFileChange} accept="application/json" multiple disabled={isProcessing} />
+
       {clients.length === 0 && !isProcessing && <UploadArea />}
 
       {isProcessing && clients.length === 0 && (
@@ -197,3 +199,5 @@ export function Dashboard() {
     </div>
   );
 }
+
+    
