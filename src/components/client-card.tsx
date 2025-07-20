@@ -79,7 +79,7 @@ export function ClientCard({ client }: ClientCardProps) {
         </div>
       </CardHeader>
       <CardContent className="flex-grow">
-          <Accordion type="single" collapsible defaultValue="item-2">
+          <Accordion type="single" collapsible defaultValue="item-1">
             <AccordionItem value="item-1">
               <AccordionTrigger className="font-headline text-lg font-semibold">
                 <div className="flex items-center gap-2">
