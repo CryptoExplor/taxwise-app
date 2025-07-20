@@ -16,6 +16,8 @@ const AuthContext = createContext<AuthContextType>({ user: null, loading: true }
 
 // List of routes that are publicly accessible
 const publicRoutes = ['/login'];
+const adminRoutes = ['/admin'];
+
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -36,18 +38,24 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (loading) return;
 
     const isPublicRoute = publicRoutes.includes(pathname);
-
+    const isAdminRoute = adminRoutes.includes(pathname);
+    
+    // If not authenticated and not on a public route, redirect to login
     if (!user && !isPublicRoute) {
-      // If user is not logged in and not on a public route, redirect to login
       router.push('/login');
-    } else if (user && isPublicRoute) {
-      // If user is logged in and on a public route (like /login), redirect to home
+    } 
+    // If authenticated and on a public route (like login), redirect to home
+    else if (user && isPublicRoute) {
       router.push('/');
     }
+    // Note: The protection for admin routes is handled within the admin page itself
+    // to check for the user's specific plan/role after fetching it from Firestore.
 
   }, [user, loading, pathname, router]);
 
 
+  // Show loading screen while auth state is being determined,
+  // or if user is being redirected away from a protected route.
   if (loading || (!user && !publicRoutes.includes(pathname))) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -26,6 +27,10 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Loader, ShieldCheck } from "lucide-react";
+import { useAuth } from "@/components/auth-provider";
+import { useRouter } from "next/navigation";
+import { getDoc } from "firebase/firestore";
+
 
 interface User {
   id: string;
@@ -38,17 +43,38 @@ interface User {
 }
 
 export default function AdminDashboard() {
+  const { user: currentUser } = useAuth();
+  const router = useRouter();
+  const [isAdmin, setIsAdmin] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
   const { toast } = useToast();
 
+  useEffect(() => {
+    const checkAdminStatus = async () => {
+      if (currentUser) {
+        const userDocRef = doc(db, "users", currentUser.uid);
+        const userDoc = await getDoc(userDocRef);
+        if (userDoc.exists() && userDoc.data().plan === 'admin') {
+          setIsAdmin(true);
+          loadUsers();
+        } else {
+          toast({
+            variant: "destructive",
+            title: "Access Denied",
+            description: "You do not have permission to view this page.",
+          });
+          router.push("/");
+        }
+      }
+    };
+    checkAdminStatus();
+  }, [currentUser, router, toast]);
+
   const loadUsers = async () => {
     setLoading(true);
     try {
-      // The collection group 'users' is not correct in a subcollection model.
-      // We will assume a top-level 'users' collection for this admin panel.
-      // NOTE: This assumes the firestore rule for admins to read this collection is set.
       const userSnap = await getDocs(collection(db, "users"));
       const data = userSnap.docs.map((doc) => ({
         id: doc.id,
@@ -84,7 +110,6 @@ export default function AdminDashboard() {
         title: "Success",
         description: `Plan updated to ${newPlan}.`,
       });
-      // Refresh user data locally
       setUsers((prevUsers) =>
         prevUsers.map((u) => (u.id === userId ? { ...u, plan: newPlan } : u))
       );
@@ -99,10 +124,17 @@ export default function AdminDashboard() {
       setUpdating(null);
     }
   };
-
-  useEffect(() => {
-    loadUsers();
-  }, []);
+  
+  if (!isAdmin) {
+     return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="text-center">
+            <Loader className="h-12 w-12 mx-auto text-primary animate-spin mb-4" />
+            <p className="text-lg font-semibold text-foreground">Verifying Access...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -123,6 +155,7 @@ export default function AdminDashboard() {
             <TableHeader>
               <TableRow>
                 <TableHead>User ID</TableHead>
+                <TableHead>Email</TableHead>
                 <TableHead>Plan</TableHead>
                 <TableHead>Change Plan</TableHead>
               </TableRow>
@@ -131,10 +164,12 @@ export default function AdminDashboard() {
               {users.map((u) => (
                 <TableRow key={u.id}>
                   <TableCell className="font-mono text-xs">{u.id}</TableCell>
+                  <TableCell>{u.email}</TableCell>
                   <TableCell className="capitalize">{u.plan || "free"}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Select
+                        defaultValue={u.plan || 'free'}
                         onValueChange={(value) => handlePlanChange(u.id, value)}
                         disabled={updating === u.id}
                       >
