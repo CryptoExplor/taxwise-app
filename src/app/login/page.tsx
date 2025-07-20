@@ -53,12 +53,10 @@ export default function LoginPage() {
         const result = await signInWithPopup(auth, provider);
         const user = result.user;
 
-        // Check if user already exists in Firestore
         const userDocRef = doc(db, "users", user.uid);
         const userDoc = await getDoc(userDocRef);
 
         if (!userDoc.exists()) {
-            // New user, create a doc
             await setDoc(userDocRef, {
                 email: user.email,
                 name: user.displayName,
@@ -99,12 +97,11 @@ export default function LoginPage() {
           password
         );
         const uid = userCred.user.uid;
-        // Initialize user data in Firestore
         await setDoc(doc(db, "users", uid), {
           email,
-          plan: "free", // Default plan for new users
+          plan: "free",
           createdAt: new Date(),
-          usage: { clients: 0, reports: 0 }, // Initialize usage
+          usage: { clients: 0, reports: 0 },
         });
         toast({
           title: "Account Created",
@@ -128,24 +125,24 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-sm">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background to-muted/80 p-4">
+      <Card className="w-full max-w-md shadow-2xl">
         <form onSubmit={handleSubmit}>
           <CardHeader className="text-center">
-            <div className="flex justify-center items-center gap-2 mb-2">
-                <Logo className="h-10 w-10 text-primary" />
+            <div className="flex justify-center items-center gap-2 mb-4">
+                <Logo className="h-12 w-12 text-primary" />
             </div>
-            <CardTitle className="text-2xl font-headline">
+            <CardTitle className="text-3xl font-headline font-bold">
               {isRegister ? "Create an Account" : "Welcome Back"}
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="pt-2">
               {isRegister
-                ? "Enter your details below to create your account."
+                ? "Enter your details below to start your journey."
                 : "Sign in to access your TaxWise dashboard."}
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
+          <CardContent className="space-y-6 p-6">
+            <div className="space-y-2 text-left">
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
@@ -157,7 +154,7 @@ export default function LoginPage() {
                 disabled={loading || googleLoading}
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 text-left">
               <Label htmlFor="password">Password</Label>
               <Input
                 id="password"
@@ -169,8 +166,8 @@ export default function LoginPage() {
               />
             </div>
           </CardContent>
-          <CardFooter className="flex flex-col gap-4">
-            <Button type="submit" className="w-full" disabled={loading || googleLoading}>
+          <CardFooter className="flex flex-col gap-4 p-6 pt-0">
+            <Button size="lg" type="submit" className="w-full font-bold" disabled={loading || googleLoading}>
               {loading && <Loader className="mr-2 h-4 w-4 animate-spin" />}
               {loading
                 ? isRegister
@@ -181,16 +178,16 @@ export default function LoginPage() {
                 : "Sign In"}
             </Button>
             
-            <div className="relative w-full">
+            <div className="relative w-full py-2">
                 <Separator />
-                <span className="absolute left-1/2 -translate-x-1/2 -top-2.5 bg-card px-2 text-xs text-muted-foreground">OR</span>
+                <span className="absolute left-1/2 -translate-x-1/2 -top-0.5 bg-card px-2 text-xs text-muted-foreground">OR</span>
             </div>
 
-            <Button variant="outline" type="button" className="w-full" onClick={handleGoogleSignIn} disabled={loading || googleLoading}>
+            <Button variant="outline" size="lg" type="button" className="w-full font-semibold" onClick={handleGoogleSignIn} disabled={loading || googleLoading}>
                 {googleLoading ? (
                     <Loader className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
-                    <GoogleIcon className="mr-2 h-4 w-4" />
+                    <GoogleIcon className="mr-2 h-5 w-5" />
                 )}
                 Sign in with Google
             </Button>
@@ -205,7 +202,7 @@ export default function LoginPage() {
                   setIsRegister(!isRegister);
                   setError("");
                 }}
-                className="font-medium text-primary underline-offset-4 hover:underline"
+                className="font-semibold text-primary underline-offset-4 hover:underline"
                 disabled={loading || googleLoading}
               >
                 {isRegister ? "Sign in" : "Sign up"}
