@@ -85,7 +85,11 @@ export function Dashboard() {
                 setClients(prev => prev.map(c => c.id === client.id ? { ...c, aiSummary: aiResponse.summary, aiTips: aiResponse.tips } : c));
             }).catch(err => {
                 console.error("AI analysis failed for client:", client.id, err);
-                // Optionally show a toast for AI failure
+                toast({
+                    variant: "destructive",
+                    title: "AI Analysis Failed",
+                    description: `Could not generate AI insights for ${client.fileName}.`,
+                });
             });
         });
     });
@@ -101,6 +105,33 @@ export function Dashboard() {
 
   return (
     <div className="container mx-auto px-4 py-8">
+      {clients.length > 0 && (
+        <div className="flex justify-between items-center mb-6 flex-wrap gap-4 p-4 rounded-lg bg-card border">
+          <h2 className="text-2xl font-headline font-bold flex items-center gap-2">
+            <Sparkles className="w-7 h-7 text-accent" />
+            Tax Dashboard
+          </h2>
+          <div className="flex gap-2">
+             <Button onClick={handleUploadClick} disabled={isProcessing}>
+                <UploadCloud className="mr-2 h-4 w-4" />
+                Upload More
+            </Button>
+            <Button variant="outline" onClick={() => exportClientsToCSV(clients)} disabled={clients.length === 0 || isProcessing}>
+                <Download className="mr-2 h-4 w-4" />
+                Export All as CSV
+            </Button>
+            <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                accept="application/json"
+                multiple
+                className="hidden"
+            />
+          </div>
+        </div>
+      )}
+
       {clients.length === 0 && !isProcessing && (
         <div className="text-center flex flex-col items-center justify-center h-[calc(100vh-12rem)]">
           <UploadCloud className="h-16 w-16 text-muted-foreground mb-4" />
@@ -110,8 +141,9 @@ export function Dashboard() {
           </p>
           <Button size="lg" onClick={handleUploadClick}>
             <FileText className="mr-2 h-5 w-5" />
-            Select ITR JSON File
+            Select ITR JSON File(s)
           </Button>
+           <p className="text-xs text-muted-foreground mt-4">No clients added yet. Upload an ITR JSON to begin!</p>
           <input
             type="file"
             ref={fileInputRef}
@@ -131,46 +163,18 @@ export function Dashboard() {
          </div>
       )}
 
-      {clients.length > 0 && (
-        <>
-          <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
-            <h2 className="text-3xl font-headline font-bold flex items-center gap-2">
-              <Sparkles className="w-8 h-8 text-accent" />
-              AI-Powered Tax Dashboard
-            </h2>
-            <div className="flex gap-2">
-               <Button onClick={handleUploadClick} disabled={isProcessing}>
-                  <UploadCloud className="mr-2 h-4 w-4" />
-                  Upload More
-              </Button>
-              <Button variant="outline" onClick={() => exportClientsToCSV(clients)} disabled={isProcessing}>
-                  <Download className="mr-2 h-4 w-4" />
-                  Export All as CSV
-              </Button>
-              <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleFileChange}
-                  accept="application/json"
-                  multiple
-                  className="hidden"
-              />
-            </div>
+      <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
+        {clients.map((client) => (
+          <ClientCard key={client.id} client={client} />
+        ))}
+        {isProcessing && (
+          <div className="text-center flex flex-col items-center justify-center rounded-lg border border-dashed p-8 md:col-span-1 lg:col-span-2">
+              <Loader className="h-12 w-12 text-primary animate-spin mb-4" />
+              <h2 className="text-xl font-headline font-semibold">Processing new returns...</h2>
+              <p className="text-muted-foreground">Adding more summaries to your dashboard.</p>
           </div>
-          <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
-            {clients.map((client) => (
-              <ClientCard key={client.id} client={client} />
-            ))}
-            {isProcessing && (
-              <div className="text-center flex flex-col items-center justify-center rounded-lg border border-dashed p-8 lg:col-span-2">
-                  <Loader className="h-12 w-12 text-primary animate-spin mb-4" />
-                  <h2 className="text-xl font-headline font-semibold">Processing new returns...</h2>
-                  <p className="text-muted-foreground">Adding more summaries to your dashboard.</p>
-              </div>
-            )}
-          </div>
-        </>
-      )}
+        )}
+      </div>
     </div>
   );
 }
