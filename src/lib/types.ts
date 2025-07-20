@@ -1,4 +1,5 @@
 
+
 export interface IncomeDetails {
   salary: number;
   houseProperty: number;
@@ -20,6 +21,7 @@ export interface Deductions {
 export interface TaxesPaid {
   tds: number;
   advanceTax: number;
+  totalTaxPaid: number;
 }
 
 export interface TaxComputationResult {
@@ -56,3 +58,5 @@ export interface ClientData {
   aiSummary?: string;
   aiTips?: string[];
 }
+
+    

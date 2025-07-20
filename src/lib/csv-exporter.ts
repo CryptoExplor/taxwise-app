@@ -1,3 +1,4 @@
+
 import type { ClientData } from './types';
 
 export function exportClientsToCSV(clients: ClientData[]) {
@@ -22,11 +23,11 @@ export function exportClientsToCSV(clients: ClientData[]) {
     client.incomeDetails.grossTotalIncome?.toLocaleString('en-IN'),
     client.deductions.totalDeductions?.toLocaleString('en-IN'),
     client.taxComputation.taxableIncome?.toLocaleString('en-IN'),
-    client.taxComputation.taxAfterRebate?.toLocaleString('en-IN'),
+    client.taxComputation.taxBeforeCess?.toLocaleString('en-IN'),
     client.taxComputation.rebate?.toLocaleString('en-IN'),
     client.taxComputation.cess?.toLocaleString('en-IN'),
     client.taxComputation.totalTaxLiability?.toLocaleString('en-IN'),
-    (client.taxesPaid.tds + client.taxesPaid.advanceTax)?.toLocaleString('en-IN'),
+    client.taxesPaid.totalTaxPaid?.toLocaleString('en-IN'),
     client.taxComputation.refund?.toLocaleString('en-IN'),
     client.taxComputation.netTaxPayable?.toLocaleString('en-IN')
   ].map(cell => `"${cell ?? ''}"`)); // Handle null/undefined and quote all cells
@@ -46,3 +47,5 @@ export function exportClientsToCSV(clients: ClientData[]) {
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 }
+
+    

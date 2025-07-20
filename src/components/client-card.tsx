@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { ClientData } from "@/lib/types";
@@ -110,7 +111,7 @@ export function ClientCard({ client }: ClientCardProps) {
                   <Separator />
                   <SummaryItem label="Rebate" value={formatCurrency(taxComputation.rebate)} />
                   <Separator />
-                  <SummaryItem label="Taxes Paid (TDS + Adv.)" value={formatCurrency(taxesPaid.tds + taxesPaid.advanceTax)} />
+                  <SummaryItem label="Taxes Paid (TDS + Adv.)" value={formatCurrency(taxesPaid.totalTaxPaid)} />
                 </div>
               </AccordionContent>
             </AccordionItem>
@@ -171,3 +172,5 @@ export function ClientCard({ client }: ClientCardProps) {
     </Card>
   );
 }
+
+    

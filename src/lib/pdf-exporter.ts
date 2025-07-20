@@ -1,3 +1,4 @@
+
 import type { ClientData } from './types';
 import { formatCurrency } from './utils';
 
@@ -64,7 +65,7 @@ export async function generatePDF(clientData: ClientData) {
       ['87A Rebate', formatCurrency(taxComputation.rebate)],
       ['Cess', formatCurrency(taxComputation.cess)],
       [{ content: 'Total Tax Liability', styles: { fontStyle: 'bold' } }, { content: formatCurrency(taxComputation.totalTaxLiability), styles: { fontStyle: 'bold' } }],
-      ['TDS & Advance Tax Paid', formatCurrency(taxesPaid.tds + taxesPaid.advanceTax)],
+      ['TDS & Advance Tax Paid', formatCurrency(taxesPaid.totalTaxPaid)],
     ],
     theme: 'grid',
     styles: { fontSize: 10, cellPadding: 2 },
@@ -89,3 +90,5 @@ export async function generatePDF(clientData: ClientData) {
 
   doc.save(`${personalInfo.name}_${personalInfo.assessmentYear}_ITR_Summary.pdf`);
 }
+
+    

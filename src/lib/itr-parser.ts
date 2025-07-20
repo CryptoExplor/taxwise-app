@@ -2,48 +2,83 @@
 import type { ClientData, TaxesPaid, PersonalInfo, Deductions, IncomeDetails } from './types';
 import { calculateAge, computeTax } from './tax-calculator';
 
+// Helper to safely access nested properties.
+const get = (obj: any, path: string, defaultValue: any = 0) => {
+  const keys = path.split('.');
+  let result = obj;
+  for (const key of keys) {
+    if (result === undefined || result === null) return defaultValue;
+    result = result[key];
+  }
+  return result === undefined || result === null ? defaultValue : result;
+};
+
+// Helper to try multiple paths and return the first valid value.
+const getFromPaths = (obj: any, paths: string[], defaultValue: any = 0) => {
+    for (const path of paths) {
+        const value = get(obj, path, null);
+        if (value !== null && value !== undefined) {
+            return value;
+        }
+    }
+    return defaultValue;
+};
+
 /**
- * Parses ITR JSON and computes a standardized summary.
- * Supports various common ITR JSON structures.
+ * Parses various ITR JSON formats and computes a standardized summary.
  * @param {File} file - The uploaded JSON file.
  * @returns {Promise<Omit<ClientData, 'id' | 'aiSummary' | 'aiTips'>>} A structured client data object.
  */
 export async function parseITR(file: File): Promise<Omit<ClientData, 'id' | 'aiSummary' | 'aiTips'>> {
   const fileContent = await file.text();
-  const jsonData = JSON.parse(fileContent);
+  const rawJson = JSON.parse(fileContent);
+
+  // The actual ITR data is often nested inside one or two top-level keys.
+  const jsonData = rawJson.ITR?.ITR4 || rawJson.ITR?.ITR1 || rawJson;
 
   try {
+    const firstName = getFromPaths(jsonData, ['PersonalInfo.AssesseeName.FirstName', 'PartA_GEN1.PersonalInfo.AssesseeName.FirstName'], '');
+    const middleName = getFromPaths(jsonData, ['PersonalInfo.AssesseeName.MiddleName', 'PartA_GEN1.PersonalInfo.AssesseeName.MiddleName'], '');
+    const lastName = getFromPaths(jsonData, ['PersonalInfo.AssesseeName.SurNameOrOrgName', 'PartA_GEN1.PersonalInfo.AssesseeName.SurNameOrOrgName'], '');
+    
+    let ay = getFromPaths(jsonData, ['Form_ITR4.AssessmentYear', 'ITRForm.AssessmentYear'], '2024');
+    if (ay.length === 4) {
+      const nextYear = (parseInt(ay, 10) + 1).toString().slice(-2);
+      ay = `${ay}-${nextYear}`;
+    }
+
     const personalInfo: PersonalInfo = {
-        name: `${jsonData?.PartA_GEN1?.PersonalInfo?.AssesseeName?.FirstName || ''} ${jsonData?.PartA_GEN1?.PersonalInfo?.AssesseeName?.MiddleName || ''} ${jsonData?.PartA_GEN1?.PersonalInfo?.AssesseeName?.SurNameOrOrgName || ''}`.trim() || 'N/A',
-        pan: jsonData?.PartA_GEN1?.PersonalInfo?.PAN || 'N/A',
-        assessmentYear: jsonData?.ITRForm?.AssessmentYear || '2024-25',
-        age: calculateAge(jsonData?.PartA_GEN1?.PersonalInfo?.DOB || ""),
+        name: `${firstName} ${middleName} ${lastName}`.replace(/\s+/g, ' ').trim() || 'N/A',
+        pan: getFromPaths(jsonData, ['PersonalInfo.PAN', 'PartA_GEN1.PersonalInfo.PAN'], 'N/A'),
+        assessmentYear: ay,
+        age: calculateAge(getFromPaths(jsonData, ['PersonalInfo.DOB', 'PartA_GEN1.PersonalInfo.DOB'], "")),
     };
-
-    const taxRegime = jsonData?.PartB_TTI?.NewTaxRegime?.IsOpted === "Y" ? 'New' : 'Old';
-
+    
+    // For ITR-4, income is under ScheduleBP. For ITR-1, it's under PartB_TI.
     const incomeDetails: IncomeDetails = {
-      salary: jsonData?.PartB_TI?.Salaries || 0,
-      houseProperty: jsonData?.PartB_TI?.IncomeFromHP || 0,
-      businessIncome: jsonData?.PartB_TI?.IncomeFromBP || 0,
+      salary: getFromPaths(jsonData, ['IncomeFromSal', 'PartB_TI.Salaries'], 0),
+      houseProperty: getFromPaths(jsonData, ['TotalIncomeOfHP', 'PartB_TI.IncomeFromHP'], 0),
+      businessIncome: getFromPaths(jsonData, ['ScheduleBP.IncChargeableUnderBus', 'IncomeFromBusinessProf', 'PartB_TI.IncomeFromBP'], 0),
       capitalGains: {
-        shortTerm: jsonData?.ScheduleCG?.ShortTermCapGain?.TotalShortTermCapGain || 0,
-        longTerm: jsonData?.ScheduleCG?.LongTermCapGain?.TotalLongTermCapGain || 0,
+        shortTerm: getFromPaths(jsonData, ['ScheduleCG.ShortTermCapGain.TotalShortTermCapGain'], 0),
+        longTerm: getFromPaths(jsonData, ['ScheduleCG.LongTermCapGain.TotalLongTermCapGain'], 0),
       },
-      otherSources: jsonData?.PartB_TI?.IncomeFromOS || 0,
-      grossTotalIncome: jsonData?.PartB_TI?.GrossTotalIncome || 0,
+      otherSources: getFromPaths(jsonData, ['IncomeOthSrc', 'PartB_TI.IncomeFromOS'], 0),
+      grossTotalIncome: getFromPaths(jsonData, ['GrossTotIncome', 'PartB_TI.GrossTotalIncome'], 0),
     };
     
-    const totalDeductions = jsonData?.PartB_TI?.TotalDeductions || 0;
-
     const deductions: Deductions = {
-      section80C: jsonData?.Deductions?.UsrDeductUndChapVIA?.Section80C || 0,
-      section80D: jsonData?.Deductions?.UsrDeductUndChapVIA?.Section80D || 0,
-      totalDeductions: totalDeductions,
+      section80C: getFromPaths(jsonData, ['DeductUndChapVIA.Section80C', 'UsrDeductUndChapVIA.Section80C'], 0),
+      section80D: getFromPaths(jsonData, ['DeductUndChapVIA.Section80D', 'UsrDeductUndChapVIA.Section80D'], 0),
+      totalDeductions: getFromPaths(jsonData, ['DeductUndChapVIA.TotalChapVIADeductions', 'UsrDeductUndChapVIA.TotalChapVIADeductions', 'PartB_TI.TotalDeductions'], 0),
     };
-
-    const taxableIncome = Math.max(0, incomeDetails.grossTotalIncome - totalDeductions);
     
+    const taxRegime = getFromPaths(jsonData, ['FilingStatus.NewTaxRegime'], 'N') === 'Y' ? 'New' : 'Old';
+    
+    const taxableIncome = getFromPaths(jsonData, ['IncomeDeductions.TotalIncome', 'PartB_TTI.TotalTaxableIncome'], 
+      Math.max(0, incomeDetails.grossTotalIncome - deductions.totalDeductions)
+    );
+
     const taxComputationResult = computeTax(
         taxableIncome,
         personalInfo.age,
@@ -51,17 +86,12 @@ export async function parseITR(file: File): Promise<Omit<ClientData, 'id' | 'aiS
         personalInfo.assessmentYear
     );
 
-    const tdsData = jsonData?.TaxPayments?.TdsOnSalary;
-    const tdsOthersData = jsonData?.TaxPayments?.TdsOnOthThanSal;
-    const advanceTaxData = jsonData?.TaxPayments?.AdvanceTax;
-    
     const taxesPaid: TaxesPaid = {
-      tds: (Array.isArray(tdsData) ? tdsData.reduce((sum, item) => sum + (item.TotalTDSonSalaries || 0), 0) : 0) + 
-           (Array.isArray(tdsOthersData) ? tdsOthersData.reduce((sum, item) => sum + (item.TotalTDSonOthThanSals || 0), 0) : 0),
-      advanceTax: Array.isArray(advanceTaxData) ? advanceTaxData.reduce((sum, item) => sum + (item.Amt || 0), 0) : 0,
+      tds: (getFromPaths(jsonData, ['TDSonSalaries.TotalTDSonSalaries'], 0) + getFromPaths(jsonData, ['TDSonOthThanSals.TotalTDSonOthThanSals'], 0)),
+      advanceTax: getFromPaths(jsonData, ['TaxPaid.TaxesPaid.AdvanceTax'], 0),
     };
 
-    const totalTaxPaid = taxesPaid.tds + taxesPaid.advanceTax;
+    const totalTaxPaid = taxesPaid.tds + taxesPaid.advanceTax + getFromPaths(jsonData, ['TaxPaid.TaxesPaid.SelfAssessmentTax'], 0);
     const finalAmount = taxComputationResult.totalTaxLiability - totalTaxPaid;
 
     return {
@@ -69,7 +99,10 @@ export async function parseITR(file: File): Promise<Omit<ClientData, 'id' | 'aiS
       personalInfo,
       incomeDetails,
       deductions,
-      taxesPaid,
+      taxesPaid: {
+        ...taxesPaid,
+        totalTaxPaid: totalTaxPaid
+      },
       taxRegime: taxRegime,
       taxComputation: {
         ...taxComputationResult,
@@ -79,6 +112,8 @@ export async function parseITR(file: File): Promise<Omit<ClientData, 'id' | 'aiS
     };
   } catch (error) {
     console.error("Error parsing ITR JSON:", error);
-    throw new Error('Failed to parse ITR JSON. The file might be invalid or in an unexpected format.');
+    throw new Error('Failed to parse ITR JSON. The file might be invalid or in an unsupported format.');
   }
 }
+
+    
