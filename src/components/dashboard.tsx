@@ -22,8 +22,16 @@ export function Dashboard() {
     const files = event.target.files;
     if (!files || files.length === 0) return;
     
+    await processFiles(Array.from(files));
+    
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const processFiles = async (files: File[]) => {
     setIsProcessing(true);
-    const newClientPromises = Array.from(files).map(async (file) => {
+    const newClientPromises = files.map(async (file) => {
       try {
         if (file.type !== "application/json") {
           toast({
@@ -93,15 +101,33 @@ export function Dashboard() {
             });
         });
     });
-
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-  };
+  }
 
   const handleUploadClick = () => {
     fileInputRef.current?.click();
   };
+  
+  const UploadArea = () => (
+    <div className="text-center flex flex-col items-center justify-center h-[calc(100vh-12rem)]">
+        <label
+          htmlFor="file-upload"
+          className="flex flex-col items-center justify-center w-full max-w-lg h-64 border-2 border-dashed border-muted-foreground/30 rounded-xl cursor-pointer bg-card hover:bg-muted transition-colors duration-200"
+        >
+          <div className="flex flex-col items-center justify-center pt-5 pb-6">
+            <UploadCloud className="w-10 h-10 mb-4 text-accent" />
+            <p className="mb-2 text-sm text-muted-foreground">
+              <span className="font-semibold">Click to upload</span> or drag and drop
+            </p>
+            <p className="text-xs text-muted-foreground">ITR JSON files only</p>
+          </div>
+          <input id="file-upload" type="file" className="hidden" ref={fileInputRef} onChange={handleFileChange} accept="application/json" multiple disabled={isProcessing} />
+        </label>
+        <h2 className="text-3xl font-headline font-bold mt-8 mb-2">Upload your ITR JSON</h2>
+        <p className="text-muted-foreground max-w-md">
+          Get an instant summary of your tax return, plus AI-powered insights. Secure, private, and fast.
+        </p>
+    </div>
+  );
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -120,40 +146,11 @@ export function Dashboard() {
                 <Download className="mr-2 h-4 w-4" />
                 Export All as CSV
             </Button>
-            <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileChange}
-                accept="application/json"
-                multiple
-                className="hidden"
-            />
           </div>
         </div>
       )}
 
-      {clients.length === 0 && !isProcessing && (
-        <div className="text-center flex flex-col items-center justify-center h-[calc(100vh-12rem)]">
-          <UploadCloud className="h-16 w-16 text-muted-foreground mb-4" />
-          <h2 className="text-3xl font-headline font-bold mb-2">Upload your ITR JSON</h2>
-          <p className="text-muted-foreground mb-6 max-w-md">
-            Get an instant, easy-to-understand summary of your tax return, plus AI-powered insights. Secure, private, and fast.
-          </p>
-          <Button size="lg" onClick={handleUploadClick}>
-            <FileText className="mr-2 h-5 w-5" />
-            Select ITR JSON File(s)
-          </Button>
-           <p className="text-xs text-muted-foreground mt-4">No clients added yet. Upload an ITR JSON to begin!</p>
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            accept="application/json"
-            multiple
-            className="hidden"
-          />
-        </div>
-      )}
+      {clients.length === 0 && !isProcessing && <UploadArea />}
 
       {isProcessing && clients.length === 0 && (
          <div className="text-center flex flex-col items-center justify-center h-[calc(100vh-12rem)]">
@@ -167,7 +164,7 @@ export function Dashboard() {
         {clients.map((client) => (
           <ClientCard key={client.id} client={client} />
         ))}
-        {isProcessing && (
+        {isProcessing && clients.length > 0 && (
           <div className="text-center flex flex-col items-center justify-center rounded-lg border border-dashed p-8 md:col-span-1 lg:col-span-2">
               <Loader className="h-12 w-12 text-primary animate-spin mb-4" />
               <h2 className="text-xl font-headline font-semibold">Processing new returns...</h2>
