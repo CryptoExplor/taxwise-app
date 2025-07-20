@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useRef, useTransition, useEffect } from "react";
-import { collection, addDoc, onSnapshot, query, orderBy } from "firebase/firestore";
+import { collection, addDoc, onSnapshot, query, orderBy, updateDoc } from "firebase/firestore";
 import { UploadCloud, Loader, Download, Sparkles } from "lucide-react";
 import type { ClientData, ClientDataToSave } from "@/lib/types";
 import { parseITR } from "@/lib/itr-parser";
@@ -85,11 +85,11 @@ export function Dashboard() {
         // Run AI analysis after saving, we don't need to block UI for this
         startTransition(() => {
             const { taxComputation, aiSummary, aiTips, ...aiInput } = parsedData;
-            getTaxAnalysis(aiInput).then((aiResponse: TaxAnalysisOutput) => {
-                // We don't update the doc here, as onSnapshot will do it.
-                // In a more complex app, we'd update the doc in firestore,
-                // and onSnapshot would handle the UI update. For now, we update local state for immediate feedback
-                setClients(prev => prev.map(c => c.id === docRef.id ? { ...c, aiSummary: aiResponse.summary, aiTips: aiResponse.tips } : c));
+            getTaxAnalysis(aiInput).then(async (aiResponse: TaxAnalysisOutput) => {
+                await updateDoc(doc(db, `users/${user!.uid}/clients`, docRef.id), {
+                    aiSummary: aiResponse.summary,
+                    aiTips: aiResponse.tips
+                });
 
             }).catch(err => {
                 console.error("AI analysis failed for client:", docRef.id, err);

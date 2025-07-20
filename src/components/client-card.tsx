@@ -172,5 +172,3 @@ export function ClientCard({ client }: ClientCardProps) {
     </Card>
   );
 }
-
-    
