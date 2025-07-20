@@ -8,6 +8,8 @@ import { useAuth } from "@/components/auth-provider";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { User } from "lucide-react";
 
 export default function Home() {
   const { user } = useAuth();
@@ -31,7 +33,15 @@ export default function Home() {
             <h1 className="text-2xl font-bold font-headline">TaxWise</h1>
           </div>
           {user && (
-              <Button variant="outline" onClick={handleLogout}>Logout</Button>
+              <div className="flex items-center gap-2">
+                <Link href="/profile">
+                    <Button variant="ghost" size="icon">
+                        <User />
+                        <span className="sr-only">Profile</span>
+                    </Button>
+                </Link>
+                <Button variant="outline" onClick={handleLogout}>Logout</Button>
+              </div>
           )}
         </div>
       </header>
