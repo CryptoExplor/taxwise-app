@@ -1,5 +1,6 @@
 
 import type { Metadata } from "next";
+import Script from "next/script";
 import { Inter, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
@@ -24,6 +25,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+       <head>
+        <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
+      </head>
       <body className={`${inter.variable} ${spaceGrotesk.variable} font-body antialiased`}>
         <AuthProvider>
           <AppInitializer />
