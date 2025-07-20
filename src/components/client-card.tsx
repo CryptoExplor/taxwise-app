@@ -15,21 +15,30 @@ import { Separator } from "./ui/separator";
 import {
   User,
   ReceiptText,
-  ShieldCheck,
   Landmark,
   FileDown,
   ArrowRight,
   ArrowDown,
+  Sparkles,
+  Lightbulb,
 } from "lucide-react";
 import { generatePDF } from "@/lib/pdf-exporter";
 import { useState } from "react";
+import { Badge } from "./ui/badge";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+
 
 interface ClientCardProps {
   client: ClientData;
 }
 
 export function ClientCard({ client }: ClientCardProps) {
-  const { personalInfo, incomeDetails, deductions, taxesPaid, taxComputation } = client;
+  const { personalInfo, incomeDetails, deductions, taxesPaid, taxComputation, taxRegime, aiSummary, aiTips } = client;
   const [isExporting, setIsExporting] = useState(false);
 
   const handleExport = async () => {
@@ -50,48 +59,89 @@ export function ClientCard({ client }: ClientCardProps) {
       <CardHeader>
         <div className="flex justify-between items-start">
             <div>
-                <CardTitle className="font-headline text-2xl flex items-center gap-2">
-                <User className="w-6 h-6 text-primary" />
-                {personalInfo.name}
-                </CardTitle>
-                <CardDescription>
-                PAN: {personalInfo.pan} | AY: {personalInfo.assessmentYear}
-                </CardDescription>
+                <div className="flex items-center gap-3">
+                    <User className="w-8 h-8 text-primary" />
+                    <div>
+                        <CardTitle className="font-headline text-2xl">
+                            {personalInfo.name}
+                        </CardTitle>
+                        <CardDescription>
+                            PAN: {personalInfo.pan} | AY: {personalInfo.assessmentYear}
+                        </CardDescription>
+                    </div>
+                </div>
             </div>
-            <p className="text-xs text-muted-foreground pt-1 truncate max-w-[120px]">{client.fileName}</p>
+             <div className="flex flex-col items-end gap-2">
+                <Badge variant={taxRegime === 'New' ? 'default' : 'secondary'}>{taxRegime} Regime</Badge>
+                <p className="text-xs text-muted-foreground pt-1 truncate max-w-[120px]">{client.fileName}</p>
+            </div>
         </div>
       </CardHeader>
-      <CardContent className="flex-grow grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
-        <div>
-          <h3 className="font-headline text-lg font-semibold flex items-center gap-2 mb-2">
-            <Landmark className="w-5 h-5 text-accent" /> Income & Deductions
-          </h3>
-          <Separator />
-          <SummaryItem label="Gross Total Income" value={formatCurrency(incomeDetails.grossTotalIncome)} />
-          <Separator />
-          <SummaryItem label="Total Deductions" value={formatCurrency(deductions.totalDeductions)} />
-          <Separator />
-          <div className="flex justify-between items-center py-3">
-              <p className="font-semibold">Net Taxable Income</p>
-              <p className="font-bold text-lg text-primary">{formatCurrency(taxComputation.taxableIncome)}</p>
-          </div>
-        </div>
+      <CardContent className="flex-grow">
+          <Accordion type="single" collapsible defaultValue="item-1">
+            <AccordionItem value="item-1">
+              <AccordionTrigger className="font-headline text-lg font-semibold">
+                <div className="flex items-center gap-2">
+                  <ReceiptText className="w-5 h-5 text-accent" /> Tax Computation
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2">
+                <div>
+                  <h3 className="font-headline text-md font-semibold flex items-center gap-2 mb-2 text-muted-foreground">
+                    <Landmark className="w-4 h-4" /> Income & Deductions
+                  </h3>
+                  <Separator />
+                  <SummaryItem label="Gross Total Income" value={formatCurrency(incomeDetails.grossTotalIncome)} />
+                  <Separator />
+                  <SummaryItem label="Total Deductions" value={formatCurrency(deductions.totalDeductions)} />
+                  <Separator />
+                   <div className="flex justify-between items-center py-2 text-sm">
+                      <p className="text-muted-foreground">Net Taxable Income</p>
+                      <p className="font-semibold text-primary">{formatCurrency(taxComputation.taxableIncome)}</p>
+                  </div>
+                </div>
 
-        <div>
-          <h3 className="font-headline text-lg font-semibold flex items-center gap-2 mb-2">
-            <ReceiptText className="w-5 h-5 text-accent" /> Tax Summary
-          </h3>
-          <Separator />
-          <SummaryItem label="Tax before Cess" value={formatCurrency(taxComputation.taxBeforeCess)} />
-          <Separator />
-          <SummaryItem label="Rebate" value={formatCurrency(taxComputation.rebate)} />
-          <Separator />
-          <SummaryItem label="Total Tax Liability" value={formatCurrency(taxComputation.totalTaxLiability)} />
-           <Separator />
-          <SummaryItem label="Taxes Paid (TDS + Adv.)" value={formatCurrency(taxesPaid.tds + taxesPaid.advanceTax)} />
-        </div>
+                <div>
+                   <h3 className="font-headline text-md font-semibold flex items-center gap-2 mb-2 text-muted-foreground">
+                    <ReceiptText className="w-4 h-4" /> Tax Summary
+                  </h3>
+                  <Separator />
+                  <SummaryItem label="Tax before Cess" value={formatCurrency(taxComputation.taxBeforeCess)} />
+                  <Separator />
+                  <SummaryItem label="Rebate" value={formatCurrency(taxComputation.rebate)} />
+                  <Separator />
+                  <SummaryItem label="Taxes Paid (TDS + Adv.)" value={formatCurrency(taxesPaid.tds + taxesPaid.advanceTax)} />
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="item-2">
+              <AccordionTrigger className="font-headline text-lg font-semibold">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-accent" /> AI Analysis
+                </div>
+              </AccordionTrigger>
+              <AccordionContent>
+                 <div className="space-y-4">
+                    {aiSummary ? (
+                         <p className="text-sm text-foreground/90 italic border-l-2 border-accent pl-3">{aiSummary}</p>
+                    ): (
+                         <p className="text-sm text-muted-foreground">AI summary is being generated...</p>
+                    )}
+                   
+                    {aiTips && aiTips.length > 0 && (
+                        <div className="space-y-2">
+                            <h4 className="font-semibold flex items-center gap-2"><Lightbulb className="w-4 h-4 text-amber-500" /> Tax Saving Tips:</h4>
+                            <ul className="list-disc pl-5 space-y-1 text-sm">
+                                {aiTips.map((tip, index) => <li key={index}>{tip}</li>)}
+                            </ul>
+                        </div>
+                    )}
+                 </div>
+              </AccordionContent>
+            </AccordionItem>
+        </Accordion>
       </CardContent>
-      <CardFooter className="flex-col items-stretch gap-4 p-4 bg-muted/50 dark:bg-card-foreground/5 rounded-b-lg">
+      <CardFooter className="flex-col items-stretch gap-4 p-4 bg-muted/50 dark:bg-card-foreground/5 rounded-b-lg mt-4">
         <div className="flex justify-between items-center p-3 rounded-lg bg-background">
           {taxComputation.netTaxPayable > 0 ? (
             <>

@@ -3,11 +3,10 @@ import { taxRules } from '../config/tax-rules';
 
 // Note: This is a simplified tax calculator for AY 2024-25 (FY 2023-24)
 // It does not cover all edge cases and complexities of the Indian Income Tax Act.
-// It assumes the "New Regime" is the default, which it is from FY 2023-24.
 
 export function computeTax(
   taxableIncome: number,
-  age: number, // age is not used in new regime but kept for potential extension
+  age: number,
   regime: 'New' | 'Old' = 'New'
 ): Omit<TaxComputation, 'netTaxPayable' | 'refund'> {
   let taxBeforeCess = 0;
@@ -84,4 +83,23 @@ export function computeTax(
     cess,
     totalTaxLiability,
   };
+}
+
+
+/**
+ * Calculates age from a date of birth string.
+ * @param {string} dobStr - Date of birth in a string format (e.g., "YYYY-MM-DD").
+ * @returns {number} The calculated age, or 30 as a default if DOB is invalid.
+ */
+export function calculateAge(dobStr: string) {
+  if (!dobStr) return 30; // default age fallback for invalid DOB
+  const dob = new Date(dobStr);
+  if (isNaN(dob.getTime())) return 30;
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const m = today.getMonth() - dob.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
+    age--;
+  }
+  return age;
 }

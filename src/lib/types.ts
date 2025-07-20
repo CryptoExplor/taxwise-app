@@ -32,17 +32,22 @@ export interface TaxComputation {
   refund: number;
 }
 
-export interface ClientData {
-  id: string;
-  fileName: string;
-  personalInfo: {
+export interface PersonalInfo {
     name: string;
     pan: string;
     assessmentYear: string;
     age: number;
-  };
+}
+
+export interface ClientData {
+  id: string;
+  fileName: string;
+  personalInfo: PersonalInfo;
   incomeDetails: IncomeDetails;
   deductions: Deductions;
   taxesPaid: TaxesPaid;
   taxComputation: TaxComputation;
+  taxRegime: 'Old' | 'New';
+  aiSummary?: string;
+  aiTips?: string[];
 }

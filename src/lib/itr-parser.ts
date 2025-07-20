@@ -1,50 +1,54 @@
-import type { ClientData, TaxesPaid } from './types';
+import type { ClientData, TaxesPaid, TaxComputation, PersonalInfo, Deductions, IncomeDetails } from './types';
+import { computeTax, calculateAge } from './tax-calculator';
 
 // This is a mock parser. In a real application, you would parse the actual ITR JSON structure.
-export async function parseITR(file: File): Promise<Omit<ClientData, 'id' | 'taxComputation'>> {
-  // Reading file is async, so we simulate it with a short delay
-  await new Promise(resolve => setTimeout(resolve, 300 + Math.random() * 500)); 
+export async function parseITR(file: File): Promise<Omit<ClientData, 'id' | 'taxComputation' | 'aiSummary' | 'aiTips'>> {
+  const fileContent = await file.text();
+  const jsonData = JSON.parse(fileContent);
 
-  // In a real scenario, you'd use FileReader to read and JSON.parse the file content.
-  // const text = await file.text();
-  // const itrData = JSON.parse(text);
-  // From itrData, you would extract all the necessary fields.
+  try {
+    const personalInfo: PersonalInfo = {
+      name: jsonData?.PartA_GEN1?.PersonalInfo?.AssesseeName?.FirstName + ' ' + (jsonData?.PartA_GEN1?.PersonalInfo?.AssesseeName?.MiddleName || '') + ' ' + jsonData?.PartA_GEN1?.PersonalInfo?.AssesseeName?.SurNameOrOrgName || "N/A",
+      pan: jsonData?.PartA_GEN1?.PersonalInfo?.PAN || "N/A",
+      assessmentYear: jsonData?.ITRForm?.AssessmentYear || "2024-25",
+      age: calculateAge(jsonData?.PartA_GEN1?.PersonalInfo?.DOB),
+    };
 
-  // For now, we return mock data based on the user's prompt example, with some randomization.
-  const salary = 400000 + Math.floor(Math.random() * 1500000);
-  const otherSources = 10000 + Math.floor(Math.random() * 40000);
-  const grossTotalIncome = salary + otherSources;
-  
-  const section80C = Math.min(150000, Math.floor(Math.random() * 160000));
-  const section80D = Math.min(25000, Math.floor(Math.random() * 30000));
-  const totalDeductions = section80C + section80D;
+    const regime = jsonData?.PartB_TTI?.NewTaxRegime?.IsOpted === "Y" ? 'New' : 'Old';
 
-  const taxesPaid: TaxesPaid = {
-    tds: Math.floor(salary * (Math.random() * 0.1 + 0.05)),
-    advanceTax: Math.floor(Math.random() * 15000),
-  };
+    const incomeDetails: IncomeDetails = {
+      salary: jsonData?.PartB_TI?.Salaries || 0,
+      houseProperty: jsonData?.PartB_TI?.IncomeFromHP || 0,
+      businessIncome: jsonData?.PartB_TI?.IncomeFromBP || 0,
+      capitalGains: {
+        shortTerm: jsonData?.ScheduleCG?.TotalSTCG || 0,
+        longTerm: jsonData?.ScheduleCG?.TotalLTCG || 0,
+      },
+      otherSources: jsonData?.PartB_TI?.IncomeFromOS || 0,
+      grossTotalIncome: jsonData?.PartB_TI?.GrossTotalIncome || 0,
+    };
+    
+    const deductions: Deductions = {
+      section80C: jsonData?.Deductions?.UsrDeductUndChapVIA?.Section80C || 0,
+      section80D: jsonData?.Deductions?.UsrDeductUndChapVIA?.Section80D || 0,
+      totalDeductions: jsonData?.PartB_TI?.TotalDeductions || 0,
+    };
 
-  return {
-    fileName: file.name,
-    personalInfo: {
-      name: "Ravi Kumar", // Mocked
-      pan: "ABCDE1234F", // Mocked
-      assessmentYear: "2024-25", // Mocked
-      age: 30 + Math.floor(Math.random() * 30), // Random age between 30 and 60
-    },
-    incomeDetails: {
-      salary,
-      houseProperty: 0,
-      businessIncome: 0,
-      capitalGains: { shortTerm: 0, longTerm: 0 },
-      otherSources,
-      grossTotalIncome,
-    },
-    deductions: {
-      section80C,
-      section80D,
-      totalDeductions,
-    },
-    taxesPaid
-  };
+    const taxesPaid: TaxesPaid = {
+      tds: (jsonData?.TaxPayments?.TdsOnSalary?.TotalTDSonSalaries || 0) + (jsonData?.TaxPayments?.TdsOnOthThanSal?.TotalTDSonOthThanSals || 0),
+      advanceTax: jsonData?.TaxPayments?.AdvanceTax?.TotalAdvanceTax || 0,
+    };
+
+    return {
+      fileName: file.name,
+      personalInfo: personalInfo,
+      incomeDetails: incomeDetails,
+      deductions: deductions,
+      taxesPaid: taxesPaid,
+      taxRegime: regime
+    };
+  } catch (error) {
+    console.error("Error parsing ITR JSON:", error);
+    throw new Error('Failed to parse ITR JSON. The file might be invalid or in an unexpected format.');
+  }
 }
