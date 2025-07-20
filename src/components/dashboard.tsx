@@ -121,29 +121,21 @@ export function Dashboard() {
   };
   
   const UploadArea = () => (
-    <div className="text-center flex flex-col items-center justify-center h-[calc(100vh-12rem)]">
-        <label
-          htmlFor="file-upload"
-          className="flex flex-col items-center justify-center w-full max-w-lg h-64 border-2 border-dashed border-muted-foreground/30 rounded-xl cursor-pointer bg-card hover:bg-muted transition-colors duration-200"
-        >
-          <div className="flex flex-col items-center justify-center pt-5 pb-6">
-            <UploadCloud className="w-10 h-10 mb-4 text-accent" />
-            <p className="mb-2 text-sm text-muted-foreground">
-              <span className="font-semibold">Click to upload</span> or drag and drop
-            </p>
-            <p className="text-xs text-muted-foreground">ITR JSON files only</p>
-          </div>
-          <input id="file-upload" type="file" className="hidden" ref={fileInputRef} onChange={handleFileChange} accept="application/json" multiple disabled={isProcessing} />
-        </label>
-        <h2 className="text-3xl font-headline font-bold mt-8 mb-2">Upload your ITR JSON</h2>
-        <p className="text-muted-foreground max-w-md">
+    <div className="text-center flex flex-col items-center justify-center min-h-[40vh] bg-background rounded-lg border-2 border-dashed border-border p-8">
+        <UploadCloud className="w-16 h-16 mb-4 text-accent" />
+        <h2 className="text-3xl font-headline font-bold mt-4 mb-2">Upload your ITR JSON</h2>
+        <p className="text-muted-foreground max-w-md mb-6">
           Get an instant summary of your tax return, plus AI-powered insights. Secure, private, and fast.
         </p>
+        <Button size="lg" onClick={handleUploadClick} disabled={isProcessing}>
+          <UploadCloud className="mr-2 h-5 w-5" />
+          {isProcessing ? "Processing..." : "Select Files"}
+        </Button>
     </div>
   );
 
   const loadingState = (title: string, subtitle: string) => (
-      <div className="text-center flex flex-col items-center justify-center h-[calc(100vh-12rem)]">
+      <div className="text-center flex flex-col items-center justify-center min-h-[40vh] bg-background rounded-lg border-2 border-dashed border-border p-8">
         <Loader className="h-16 w-16 text-primary animate-spin mb-4" />
         <h2 className="text-2xl font-headline font-semibold">{title}</h2>
         <p className="text-muted-foreground">{subtitle}</p>
@@ -151,30 +143,36 @@ export function Dashboard() {
   );
   
   if (isInitialLoading) {
-    return loadingState("Loading Dashboard...", "Please wait while we fetch your saved clients.");
+    return (
+        <div className="container mx-auto px-4 py-8">
+            {loadingState("Loading Dashboard...", "Please wait while we fetch your saved clients.")}
+        </div>
+    );
   }
-
 
   return (
     <div className="container mx-auto px-4 py-8">
-      {clients.length > 0 && (
-        <div className="flex justify-between items-center mb-6 flex-wrap gap-4 p-4 rounded-lg bg-card border">
-          <h2 className="text-2xl font-headline font-bold flex items-center gap-2">
-            <Sparkles className="w-7 h-7 text-accent" />
-            Tax Dashboard
-          </h2>
-          <div className="flex gap-2">
-             <Button onClick={handleUploadClick} disabled={isProcessing}>
-                <UploadCloud className="mr-2 h-4 w-4" />
-                Upload More
-            </Button>
-            <Button variant="outline" onClick={() => exportClientsToCSV(clients)} disabled={clients.length === 0 || isProcessing}>
-                <Download className="mr-2 h-4 w-4" />
-                Export All as CSV
-            </Button>
+      <div className="flex justify-between items-center mb-6 flex-wrap gap-4 p-4 rounded-lg bg-card border">
+          <div className="flex items-center gap-3">
+            <Sparkles className="w-8 h-8 text-accent" />
+            <div>
+              <h2 className="text-3xl font-headline font-bold">Tax Dashboard</h2>
+              <p className="text-muted-foreground">Your ITR summaries at a glance.</p>
+            </div>
           </div>
+          {clients.length > 0 && (
+            <div className="flex gap-2">
+              <Button onClick={handleUploadClick} disabled={isProcessing}>
+                  <UploadCloud className="mr-2 h-4 w-4" />
+                  Upload More
+              </Button>
+              <Button variant="outline" onClick={() => exportClientsToCSV(clients)} disabled={clients.length === 0 || isProcessing}>
+                  <Download className="mr-2 h-4 w-4" />
+                  Export All as CSV
+              </Button>
+            </div>
+          )}
         </div>
-      )}
 
       <input id="file-upload-main" type="file" className="hidden" ref={fileInputRef} onChange={handleFileChange} accept="application/json" multiple disabled={isProcessing} />
 
@@ -184,20 +182,20 @@ export function Dashboard() {
         loadingState("Processing your returns...", "Please wait while we compute your tax summary.")
       )}
 
-      <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
-        {clients.map((client) => (
-          <ClientCard key={client.id} client={client} />
-        ))}
-        {isProcessing && clients.length > 0 && (
-          <div className="text-center flex flex-col items-center justify-center rounded-lg border border-dashed p-8 md:col-span-1 lg:col-span-2">
-              <Loader className="h-12 w-12 text-primary animate-spin mb-4" />
-              <h2 className="text-xl font-headline font-semibold">Processing new returns...</h2>
-              <p className="text-muted-foreground">Adding more summaries to your dashboard.</p>
-          </div>
-        )}
-      </div>
+      {clients.length > 0 && (
+        <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
+          {clients.map((client) => (
+            <ClientCard key={client.id} client={client} />
+          ))}
+          {isProcessing && clients.length > 0 && (
+            <div className="text-center flex flex-col items-center justify-center rounded-lg border border-dashed p-8 md:col-span-1 lg:col-span-2">
+                <Loader className="h-12 w-12 text-primary animate-spin mb-4" />
+                <h2 className="text-xl font-headline font-semibold">Processing new returns...</h2>
+                <p className="text-muted-foreground">Adding more summaries to your dashboard.</p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
-
-    

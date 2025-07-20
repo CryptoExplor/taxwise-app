@@ -56,7 +56,7 @@ export function ClientCard({ client }: ClientCardProps) {
   );
 
   return (
-    <Card className="flex flex-col">
+    <Card className="flex flex-col hover:shadow-lg transition-shadow duration-300">
       <CardHeader>
         <div className="flex justify-between items-start">
             <div>
