@@ -2,9 +2,9 @@
 "use client";
 
 import { useState, useRef, useTransition, useEffect } from "react";
-import { collection, addDoc, onSnapshot, query, orderBy, updateDoc } from "firebase/firestore";
+import { collection, addDoc, onSnapshot, query, orderBy, updateDoc, doc } from "firebase/firestore";
 import { UploadCloud, Loader, Download, Sparkles } from "lucide-react";
-import type { ClientData, ClientDataToSave } from "@/lib/types";
+import type { ClientData } from "@/lib/types";
 import { parseITR } from "@/lib/itr-parser";
 import { ClientCard } from "./client-card";
 import { Button } from "./ui/button";

@@ -47,5 +47,3 @@ export function exportClientsToCSV(clients: ClientData[]) {
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 }
-
-    
