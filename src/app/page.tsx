@@ -9,7 +9,7 @@ import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { User, Calculator } from "lucide-react";
+import { User, Calculator, LogOut } from "lucide-react";
 import { LandingPage } from "@/components/landing-page";
 
 export default function Home() {
@@ -47,7 +47,10 @@ export default function Home() {
                         <User className="mr-2 h-4 w-4" /> Profile
                     </Link>
                   </Button>
-                  <Button variant="outline" onClick={handleLogout}>Logout</Button>
+                  <Button variant="outline" onClick={handleLogout}>
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Logout
+                  </Button>
                 </>
              ) : (
                 <>

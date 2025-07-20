@@ -133,8 +133,13 @@ export function LandingPage() {
             
              {/* Footer */}
             <footer className="py-6 border-t bg-muted/50">
-                <div className="container mx-auto text-center text-sm text-muted-foreground">
-                    © {new Date().getFullYear()} TaxWise. All Rights Reserved.
+                <div className="container mx-auto flex flex-col md:flex-row justify-between items-center text-sm text-muted-foreground">
+                    <span>© {new Date().getFullYear()} TaxWise. All Rights Reserved.</span>
+                    <div className="flex gap-4 mt-4 md:mt-0">
+                        <Link href="/contact" className="hover:text-primary transition-colors">Contact</Link>
+                        <Link href="/profile" className="hover:text-primary transition-colors">Profile</Link>
+                        <Link href="/calculator" className="hover:text-primary transition-colors">Calculator</Link>
+                    </div>
                 </div>
             </footer>
         </div>
