@@ -26,15 +26,12 @@ const getFromPaths = (obj: any, paths: string[], defaultValue: any = 0) => {
 
 // Helper to detect ITR form type
 const detectITRForm = (obj: any): string => {
-    if (get(obj, 'ITR.ITR1', null)) return 'ITR-1';
-    if (get(obj, 'ITR.ITR2', null)) return 'ITR-2';
-    if (get(obj, 'ITR.ITR3', null)) return 'ITR-3';
-    if (get(obj, 'ITR.ITR4', null)) return 'ITR-4';
-    // Fallback for different structures
-    if (get(obj, 'ITR1', null)) return 'ITR-1';
-    if (get(obj, 'ITR2', null)) return 'ITR-2';
-    if (get(obj, 'ITR3', null)) return 'ITR-3';
-    if (get(obj, 'ITR4', null)) return 'ITR-4';
+    if (get(obj, 'ITR.ITR1', null) || get(obj, 'ITR1', null)) return 'ITR-1';
+    if (get(obj, 'ITR.ITR2', null) || get(obj, 'ITR2', null)) return 'ITR-2';
+    if (get(obj, 'ITR.ITR3', null) || get(obj, 'ITR3', null)) return 'ITR-3';
+    if (get(obj, 'ITR.ITR4', null) || get(obj, 'ITR4', null)) return 'ITR-4';
+    // Fallback for prefill data structure
+    if (get(obj, 'personalInfo', null)) return 'Prefill';
     return 'Unknown';
 };
 
@@ -48,18 +45,29 @@ export async function parseITR(file: File): Promise<ClientDataToSave> {
   const fileContent = await file.text();
   const rawJson = JSON.parse(fileContent);
 
+  const itrForm = detectITRForm(rawJson);
+
   // The actual ITR data is often nested inside one or two top-level keys.
-  const jsonData = rawJson.ITR?.ITR4 || rawJson.ITR?.ITR1 || rawJson.ITR?.ITR2 || rawJson.ITR?.ITR3 || rawJson;
+  const jsonData = rawJson.ITR?.[`ITR${itrForm.split('-')[1]}`] || rawJson.ITR || rawJson;
 
   try {
-    const firstName = getFromPaths(jsonData, ['PersonalInfo.AssesseeName.FirstName', 'PartA_GEN1.PersonalInfo.AssesseeName.FirstName', 'personalInfo.assesseeName.firstName'], '');
-    const middleName = getFromPaths(jsonData, ['PersonalInfo.AssesseeName.MiddleName', 'PartA_GEN1.PersonalInfo.AssesseeName.MiddleName', 'personalInfo.assesseeName.middleName'], '');
-    const lastName = getFromPaths(jsonData, ['PersonalInfo.AssesseeName.SurNameOrOrgName', 'PartA_GEN1.PersonalInfo.AssesseeName.SurNameOrOrgName', 'personalInfo.assesseeName.surNameOrOrgName'], '');
+    const commonPaths = {
+        firstName: ['PersonalInfo.AssesseeName.FirstName', 'PartA_GEN1.PersonalInfo.AssesseeName.FirstName', 'personalInfo.assesseeName.firstName'],
+        middleName: ['PersonalInfo.AssesseeName.MiddleName', 'PartA_GEN1.PersonalInfo.AssesseeName.MiddleName', 'personalInfo.assesseeName.middleName'],
+        lastName: ['PersonalInfo.AssesseeName.SurNameOrOrgName', 'PartA_GEN1.PersonalInfo.AssesseeName.SurNameOrOrgName', 'personalInfo.assesseeName.surNameOrOrgName', 'assesseeName.surNameOrOrgName'],
+        pan: ['PersonalInfo.PAN', 'PartA_GEN1.PersonalInfo.PAN', 'personalInfo.pan', 'pan'],
+        dob: ['PersonalInfo.DOB', 'PartA_GEN1.PersonalInfo.DOB', 'personalInfo.dob', 'dob'],
+        ay: ['Form_ITR4.AssessmentYear', 'ITRForm.AssessmentYear', 'Form_ITR1.AssessmentYear', 'Form_ITR2.AssessmentYear', 'Form_ITR3.AssessmentYear'],
+    };
+
+    const firstName = getFromPaths(jsonData, commonPaths.firstName, '');
+    const middleName = getFromPaths(jsonData, commonPaths.middleName, '');
+    const lastName = getFromPaths(jsonData, commonPaths.lastName, '');
     
-    let ay = getFromPaths(jsonData, ['Form_ITR4.AssessmentYear', 'ITRForm.AssessmentYear'], null);
+    let ay = getFromPaths(jsonData, commonPaths.ay, null);
     
     if (!ay) {
-        const ayEndYear = get(jsonData, 'incDeductionsOthIncCPC.0.itrAy', null) || get(jsonData, 'ITRForm.AssessmentYear', null);
+        const ayEndYear = get(jsonData, 'incDeductionsOthIncCPC.0.itrAy', null);
         if(ayEndYear) {
             const startYear = parseInt(ayEndYear, 10) - 1;
             const endYear = parseInt(ayEndYear, 10).toString().slice(-2);
@@ -74,33 +82,28 @@ export async function parseITR(file: File): Promise<ClientDataToSave> {
 
     const personalInfo = {
         name: `${firstName} ${middleName} ${lastName}`.replace(/\s+/g, ' ').trim() || 'N/A',
-        pan: getFromPaths(jsonData, ['PersonalInfo.PAN', 'PartA_GEN1.PersonalInfo.PAN', 'personalInfo.pan'], 'N/A'),
+        pan: getFromPaths(jsonData, commonPaths.pan, 'N/A'),
         assessmentYear: ay,
-        age: calculateAge(getFromPaths(jsonData, ['PersonalInfo.DOB', 'PartA_GEN1.PersonalInfo.DOB', 'personalInfo.dob'], "")),
-        itrForm: detectITRForm(rawJson),
+        age: calculateAge(getFromPaths(jsonData, commonPaths.dob, "")),
+        itrForm,
     };
     
-    const otherSourcesArray = get(jsonData, 'incomeDeductionsOthersInc', []);
-    const interestIncomeFD = otherSourcesArray.find((item: any) => item.othSrcNatureDesc === 'IFD')?.othSrcOthAmount || getFromPaths(jsonData, ['scheduleOS.intrstFrmTermDeposit', 'ScheduleOS.IncomeOthSrc.Sec194AIntBanking'], 0);
-    const interestIncomeSaving = otherSourcesArray.find((item: any) => item.othSrcNatureDesc === 'SAV')?.othSrcOthAmount || getFromPaths(jsonData, ['insights.intrstFrmSavingBank', 'ScheduleOS.IncomeOthSrc.InterestFromSavings'], 0);
-    const dividendIncome = otherSourcesArray.find((item: any) => item.othSrcNatureDesc === 'DIVIDEND')?.othSrcOthAmount || getFromPaths(jsonData, ['ScheduleOS.IncomeOthSrc.DividendInc', 'PartB_TI.IncomeFromOS.DividendGross'], 0);
-    const otherMiscIncome = otherSourcesArray.find((item: any) => item.othSrcNatureDesc === 'OTH')?.othSrcOthAmount || getFromPaths(jsonData, ['ScheduleOS.IncomeOthSrc.OthersInc', 'PartB_TI.IncomeFromOS.OthersGross'], 0);
-    
+    // Form specific paths
     const incomeDetails = {
-      salary: get(jsonData, 'PartB_TI.Salaries', 0),
-      houseProperty: get(jsonData, 'PartB_TI.IncomeFromHP', 0),
-      businessIncome: get(jsonData, 'PartB_TI.IncomeFromBP', 0),
+      salary: getFromPaths(jsonData, ['PartBTI.Salaries', 'PartB_TI.Salaries'], 0),
+      houseProperty: getFromPaths(jsonData, ['PartBTI.IncomeFromHP', 'PartB_TI.IncomeFromHP', 'ScheduleHP.TotalIncomeOfHP'], 0),
+      businessIncome: getFromPaths(jsonData, ['PartBTI.IncomeFromBP', 'PartB_TI.IncomeFromBP', 'PartA_PL.Total_BP'], 0),
       capitalGains: {
-        shortTerm: get(jsonData, 'ScheduleCG.ShortTermCapGain.TotalShortTermCapGain', 0),
-        longTerm: get(jsonData, 'ScheduleCG.LongTermCapGain.TotalLongTermCapGain', 0),
+        shortTerm: getFromPaths(jsonData, ['ScheduleCG.ShortTermCapGain.TotalShortTermCapGain'], 0),
+        longTerm: getFromPaths(jsonData, ['ScheduleCG.LongTermCapGain.TotalLongTermCapGain'], 0),
         stcg: { purchase: 0, sale: 0, expenses: 0 },
         ltcg: { purchase: 0, sale: 0, expenses: 0 },
       },
-      interestIncomeFD: interestIncomeFD,
-      interestIncomeSaving: interestIncomeSaving,
-      dividendIncome: dividendIncome,
-      otherSources: otherMiscIncome,
-      grossTotalIncome: get(jsonData, 'PartB_TI.GrossTotalIncome', 0),
+      interestIncomeFD: getFromPaths(jsonData, ['ScheduleOS.InterestFromDeposits', 'insights.intrstFrmTermDeposit', 'incomeDeductionsOthersInc.0.othSrcOthAmount']),
+      interestIncomeSaving: getFromPaths(jsonData, ['ScheduleOS.InterestFromSavings', 'insights.intrstFrmSavingBank', 'incomeDeductionsOthersInc.1.othSrcOthAmount']),
+      dividendIncome: getFromPaths(jsonData, ['ScheduleOS.DividendInc', 'PartB_TI.IncomeFromOS.DividendGross']),
+      otherSources: getFromPaths(jsonData, ['ScheduleOS.OthersInc', 'PartB_TI.IncomeFromOS.OthersGross', 'incomeDeductionsOthersInc.2.othSrcOthAmount']),
+      grossTotalIncome: getFromPaths(jsonData, ['PartBTI.GrossTotalIncome', 'PartB_TI.GrossTotalIncome'], 0),
     };
 
     // Gross Total Income is sometimes at a different path or needs calculation
@@ -119,15 +122,15 @@ export async function parseITR(file: File): Promise<ClientDataToSave> {
     }
     
     const deductions = {
-      section80C: getFromPaths(jsonData, ['DeductUndChapVIA.Section80C']),
-      section80D: getFromPaths(jsonData, ['DeductUndChapVIA.Section80D']),
-      interestOnBorrowedCapital: getFromPaths(jsonData, ['ScheduleHP.InterestPayable']),
-      section80CCD1B: getFromPaths(jsonData, ['DeductUndChapVIA.Section80CCD_1B']),
-      section80CCD2: getFromPaths(jsonData, ['DeductUndChapVIA.Section80CCD_2']),
-      section80G: getFromPaths(jsonData, ['DeductUndChapVIA.Section80G']),
-      section80TTA: getFromPaths(jsonData, ['DeductUndChapVIA.Section80TTA', 'insights.UsrDeductUndChapVIAType.Section80TTA']),
-      section80TTB: getFromPaths(jsonData, ['DeductUndChapVIA.Section80TTB', 'insights.UsrDeductUndChapVIAType.Section80TTB']),
-      totalDeductions: get(jsonData, 'PartB_TI.TotalDeductions', 0),
+      section80C: getFromPaths(jsonData, ['DeductUndChapVIA.Section80C', 'ScheduleVIA.Deductions.Sec80C'], 0),
+      section80D: getFromPaths(jsonData, ['DeductUndChapVIA.Section80D', 'ScheduleVIA.Deductions.Sec80D'], 0),
+      interestOnBorrowedCapital: getFromPaths(jsonData, ['ScheduleHP.InterestPayable'], 0),
+      section80CCD1B: getFromPaths(jsonData, ['DeductUndChapVIA.Section80CCD_1B', 'ScheduleVIA.Deductions.Sec80CCD1B'], 0),
+      section80CCD2: getFromPaths(jsonData, ['DeductUndChapVIA.Section80CCD_2', 'ScheduleVIA.Deductions.Sec80CCD2'], 0),
+      section80G: getFromPaths(jsonData, ['DeductUndChapVIA.Section80G', 'Schedule80G.TotalDonationAmt'], 0),
+      section80TTA: getFromPaths(jsonData, ['DeductUndChapVIA.Section80TTA', 'ScheduleVIA.Deductions.Sec80TTA', 'insights.UsrDeductUndChapVIAType.Section80TTA'], 0),
+      section80TTB: getFromPaths(jsonData, ['DeductUndChapVIA.Section80TTB', 'ScheduleVIA.Deductions.Sec80TTB', 'insights.UsrDeductUndChapVIAType.Section80TTB'], 0),
+      totalDeductions: getFromPaths(jsonData, ['PartBTI.TotalDeductions', 'PartB_TI.TotalDeductions', 'ScheduleVIA.TotalDeductions'], 0),
     };
 
     if (deductions.totalDeductions === 0) {
@@ -136,9 +139,9 @@ export async function parseITR(file: File): Promise<ClientDataToSave> {
       );
     }
     
-    const taxRegime = getFromPaths(jsonData, ['FilingStatus.NewTaxRegime'], 'N') === 'Y' ? 'New' : 'Old';
+    const taxRegime = getFromPaths(jsonData, ['FilingStatus.NewTaxRegime', 'PARTA_GEN1.PersonalInfo.TaxRegime'], 'N') === 'Y' ? 'New' : 'Old';
     
-    const standardDeduction = incomeDetails.salary > 0 ? 50000 : 0;
+    const standardDeduction = incomeDetails.salary > 0 ? Math.min(incomeDetails.salary, 50000) : 0;
     const oldRegimeTaxableIncome = Math.max(0, incomeDetails.grossTotalIncome - deductions.totalDeductions - standardDeduction);
     const newRegimeTaxableIncome = Math.max(0, incomeDetails.grossTotalIncome - standardDeduction);
 
@@ -157,12 +160,12 @@ export async function parseITR(file: File): Promise<ClientDataToSave> {
     const totalTdsFrom26AS = tdsArray.reduce((acc: number, item: any) => acc + (get(item, 'taxDeductCreditDtls.taxClaimedOwnHands', 0) || 0), 0);
     
     const taxesPaid = {
-      tds: getFromPaths(jsonData, ['TaxPayments.TDS'], totalTdsFrom26AS || (get(jsonData, 'TDSonSalaries.TotalTDSonSalaries', 0) + get(jsonData, 'TDSonOthThanSals.TotalTDSonOthThanSals', 0))),
-      advanceTax: getFromPaths(jsonData, ['TaxPayments.AdvanceTax'], get(jsonData, 'TaxPaid.TaxesPaid.AdvanceTax', 0)),
-      selfAssessmentTax: getFromPaths(jsonData, ['TaxPayments.SelfAssessmentTax'], get(jsonData, 'TaxPaid.TaxesPaid.SelfAssessmentTax', 0)),
+      tds: getFromPaths(jsonData, ['TaxPayments.TDS', 'TDS.TotalTDS'], totalTdsFrom26AS || (get(jsonData, 'TDSonSalaries.TotalTDSonSalaries', 0) + get(jsonData, 'TDSonOthThanSals.TotalTDSonOthThanSals', 0))),
+      advanceTax: getFromPaths(jsonData, ['TaxPayments.AdvanceTax', 'TaxPaid.TaxesPaid.AdvanceTax'], 0),
+      selfAssessmentTax: getFromPaths(jsonData, ['TaxPayments.SelfAssessmentTax', 'TaxPaid.TaxesPaid.SelfAssessmentTax'], 0),
     };
     
-    const totalTaxPaid = getFromPaths(jsonData, ['TaxPayments.TotalTaxesPaid'], taxesPaid.tds + taxesPaid.advanceTax + taxesPaid.selfAssessmentTax);
+    const totalTaxPaid = getFromPaths(jsonData, ['TaxPaid.TotalTaxesPaid', 'TaxPayments.TotalTaxesPaid'], taxesPaid.tds + taxesPaid.advanceTax + taxesPaid.selfAssessmentTax);
 
     const finalAmount = taxComputationResult.totalTaxLiability - totalTaxPaid;
 
