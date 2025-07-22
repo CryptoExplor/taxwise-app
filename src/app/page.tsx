@@ -1,83 +1,32 @@
 
 "use client";
-
+import { useAppContext } from "@/context/app-context";
 import { Dashboard } from "@/components/dashboard";
-import { Logo } from "@/components/icons";
-import { Button } from "@/components/ui/button";
-import { useAuth } from "@/components/auth-provider";
-import { signOut } from "firebase/auth";
-import { auth } from "@/lib/firebase";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { User, Calculator, LogOut, Tags } from "lucide-react";
-import { LandingPage } from "@/components/landing-page";
+import { ITRUpload } from "@/components/itr-upload";
+import { ClientForm } from "@/components/client-form";
+import { ComputationDashboard } from "@/components/computation-dashboard";
 
 export default function Home() {
-  const { user } = useAuth();
-  const router = useRouter();
+    const { activeTab } = useAppContext();
 
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      router.push('/login');
-    } catch (error) {
-      console.error("Error signing out:", error);
-    }
-  };
+    const renderContent = () => {
+        switch (activeTab) {
+            case 'dashboard':
+                return <Dashboard />;
+            case 'upload':
+                return <ITRUpload />;
+            case 'manual':
+                return <ClientForm />;
+            case 'computation':
+                return <ComputationDashboard />;
+            default:
+                return <Dashboard />;
+        }
+    };
 
-  const Header = () => (
-     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-16 items-center justify-between">
-          <div className="mr-4 flex items-center">
-            <Link href="/" className="flex items-center gap-2">
-              <Logo className="h-8 w-8 mr-2 text-primary" />
-              <h1 className="text-2xl font-bold font-headline">TaxWise</h1>
-            </Link>
-          </div>
-          <nav className="flex items-center gap-2">
-             {user ? (
-                <>
-                  <Button variant="ghost" asChild>
-                    <Link href="/pricing">
-                        <Tags className="mr-2 h-4 w-4" /> Pricing
-                    </Link>
-                  </Button>
-                  <Button variant="ghost" asChild>
-                    <Link href="/calculator">
-                        <Calculator className="mr-2 h-4 w-4" /> Calculator
-                    </Link>
-                  </Button>
-                  <Button variant="ghost" asChild>
-                    <Link href="/profile">
-                        <User className="mr-2 h-4 w-4" /> Profile
-                    </Link>
-                  </Button>
-                  <Button variant="outline" onClick={handleLogout}>
-                    <LogOut className="mr-2 h-4 w-4" />
-                    Logout
-                  </Button>
-                </>
-             ) : (
-                <>
-                   <Button variant="ghost" asChild>
-                      <Link href="/login">Login</Link>
-                   </Button>
-                   <Button asChild>
-                      <Link href="/login">Get Started</Link>
-                   </Button>
-                </>
-             )}
-          </nav>
+    return (
+        <div>
+            {renderContent()}
         </div>
-      </header>
-  );
-
-  return (
-    <div className="flex flex-col min-h-screen bg-background text-foreground">
-      <Header />
-      <main className="flex-grow">
-        {user ? <Dashboard /> : <LandingPage />}
-      </main>
-    </div>
-  );
+    );
 }

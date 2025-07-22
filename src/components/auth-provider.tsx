@@ -2,9 +2,8 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { onAuthStateChanged, type User } from 'firebase/auth';
+import { onAuthStateChanged, type User, signInAnonymously } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
-import { Loader } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { doc, getDoc } from 'firebase/firestore';
 
@@ -24,25 +23,24 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType>({ user: null, userProfile: null, loading: true });
 
-const publicRoutes = ['/login', '/pricing', '/contact', '/calculator'];
-
-// This function checks if a given pathname is a protected route.
-const isProtectedRoute = (pathname: string | null) => {
-    if (!pathname) return true; // Assume protected if pathname isn't available yet
-    return !publicRoutes.includes(pathname);
-}
-
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const router = useRouter();
-  const pathname = usePathname();
   
   // Effect for handling authentication state changes
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        setUser(currentUser);
+      } else {
+        try {
+          const userCredential = await signInAnonymously(auth);
+          setUser(userCredential.user);
+        } catch (error) {
+          console.error("Anonymous sign-in failed:", error);
+        }
+      }
       setLoading(false);
     });
     return () => unsubscribe();
@@ -50,7 +48,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   // Effect for fetching user profile data when user is authenticated
   const fetchUserProfile = useCallback(async () => {
-    if (user) {
+    if (user && !user.isAnonymous) { // Only fetch profile for non-anonymous users
       const userDocRef = doc(db, 'users', user.uid);
       try {
         const userDoc = await getDoc(userDocRef);
@@ -59,10 +57,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }
       } catch (error) {
         console.error("Failed to fetch user profile:", error);
-        setUserProfile(null); // Clear profile on error
+        setUserProfile(null);
       }
     } else {
-      setUserProfile(null); // Clear profile if no user
+      setUserProfile(null);
     }
   }, [user]);
 
@@ -70,36 +68,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     fetchUserProfile();
   }, [fetchUserProfile]);
 
-  // Effect for handling route protection
-  useEffect(() => {
-    if (loading) return; // Don't do anything until the auth state is resolved
-
-    const protectedRoute = isProtectedRoute(pathname);
-    
-    if (!user && protectedRoute) {
-      router.push('/login');
-    } 
-    else if (user && pathname === '/login') {
-      router.push('/');
-    }
-
-  }, [user, loading, pathname, router]);
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <div className="text-center">
-            <Loader className="h-12 w-12 mx-auto text-primary animate-spin mb-4" />
-            <p className="text-lg font-semibold text-foreground">Loading Session...</p>
-        </div>
+      <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-950 text-gray-800 dark:text-gray-200">
+          <div className="flex flex-col items-center">
+              <svg className="animate-spin h-10 w-10 text-blue-600 dark:text-blue-400 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <p className="text-lg">Initializing TaxWise...</p>
+          </div>
       </div>
     );
-  }
-
-  // If not loading and trying to access a protected route without being logged in,
-  // we return null to prevent a flash of content before redirection.
-  if (!user && isProtectedRoute(pathname)) {
-    return null;
   }
 
   return (

@@ -1,127 +1,130 @@
-import type { TaxComputationResult, TaxSlab, IncomeDetails } from './types';
-import { taxRules } from '../config/tax-rules';
 
-export function computeTax(
-  taxableIncome: number,
-  age: number,
-  regime: 'New' | 'Old' = 'New',
-  ay: string = "2024-25",
-  incomeDetails: IncomeDetails,
-  deductions: number,
-): TaxComputationResult {
-  
-  // Get the rules for the specific assessment year
-  const yearRules = taxRules[ay as keyof typeof taxRules];
-  if (!yearRules) {
-    console.warn(`Tax rules for AY ${ay} not found. Falling back to 2024-25.`);
-    return computeTax(taxableIncome, age, regime, "2024-25", incomeDetails, deductions);
-  }
-  
-  const rule = regime === 'Old' ? yearRules.old : yearRules.new;
-  if (!rule) {
-    console.warn(`Tax rules for AY ${ay} and regime ${regime} not found. Falling back.`);
-    return computeTax(taxableIncome, age, 'New', "2024-25", incomeDetails, deductions);
-  }
+import type { IncomeData, DeductionData, CapitalGainsTransaction } from './types';
 
-  // 1. Separate Capital Gains and calculate tax on them
-  const stcg = incomeDetails.capitalGains.shortTerm > 0 ? incomeDetails.capitalGains.shortTerm : 0;
-  const ltcg = incomeDetails.capitalGains.longTerm > 0 ? incomeDetails.capitalGains.longTerm : 0;
+export const calculateCapitalGainsTax = (transactions: CapitalGainsTransaction[] = []) => {
+    let totalSTCG111A = 0; 
+    let totalLTCG112A = 0; 
+    let totalOtherSTCG = 0;
+    let totalOtherLTCG = 0; 
 
-  const taxOnSTCG = stcg * rule.stcgRate;
-  // For LTCG, tax is on amount exceeding the exemption
-  const taxableLTCG = Math.max(0, ltcg - rule.ltcgExemption); 
-  const taxOnLTCG = taxableLTCG * rule.ltcgRate;
-  
-  // 2. Calculate tax on the remaining "normal" income
-  const taxableIncomeNormal = Math.max(0, taxableIncome - stcg - ltcg);
-  let taxOnNormalIncome = 0;
-  const slabBreakdown: TaxSlab[] = [];
+    let capitalGainsTax = 0;
 
-  let slabsToUse = rule.slabs;
-  if (regime === 'Old') {
-    if (age >= 80 && rule.superSeniorSlabs) {
-        slabsToUse = rule.superSeniorSlabs;
-    } else if (age >= 60 && rule.seniorSlabs) {
-        slabsToUse = rule.seniorSlabs;
+    transactions.forEach(tx => {
+        if (!tx.purchaseDate || !tx.saleDate) return;
+        
+        const purchaseDate = new Date(tx.purchaseDate);
+        const saleDate = new Date(tx.saleDate);
+
+        if (isNaN(purchaseDate.getTime()) || isNaN(saleDate.getTime())) return;
+        
+        const holdingPeriodMs = saleDate.getTime() - purchaseDate.getTime();
+        const holdingPeriodDays = holdingPeriodMs / (1000 * 60 * 60 * 24);
+
+        let costOfAcquisition = tx.purchasePrice;
+        if (purchaseDate < new Date('2018-01-31') && tx.fmv2018) {
+            costOfAcquisition = Math.max(tx.purchasePrice, tx.fmv2018);
+        }
+
+        const gain = tx.salePrice - costOfAcquisition - (tx.expenses || 0);
+
+        if (gain <= 0) return;
+
+        if (tx.assetType === 'equity_listed' || tx.assetType === 'equity_mf') {
+            if (holdingPeriodDays <= 365) {
+                totalSTCG111A += gain;
+            } else {
+                totalLTCG112A += gain;
+            }
+        } else if (tx.assetType === 'property' || tx.assetType === 'unlisted_shares') {
+            if (holdingPeriodDays <= 730) {
+                totalOtherSTCG += gain;
+            } else {
+                totalOtherLTCG += gain;
+            }
+        } else {
+            if (holdingPeriodDays <= 365) {
+                totalOtherSTCG += gain;
+            } else {
+                totalOtherLTCG += gain;
+            }
+        }
+    });
+
+    // STCG under Section 111A: 20% (for AY 2025-26)
+    capitalGainsTax += totalSTCG111A * 0.20;
+
+    // LTCG under Section 112A: 12.5% on gains over ₹1.25 lakh
+    const taxableLTCG112A = Math.max(0, totalLTCG112A - 125000);
+    capitalGainsTax += taxableLTCG112A * 0.125;
+
+    // Other LTCG: 12.5% without indexation (simplified)
+    capitalGainsTax += totalOtherLTCG * 0.125;
+    
+    // Note: totalOtherSTCG is taxed at slab rates, so it's not added to capitalGainsTax here.
+    // It should be added to the normal income for slab calculation. This function only returns the tax on special rate gains.
+
+    return Math.round(capitalGainsTax);
+};
+
+
+export const computeTax = (incomeData: IncomeData, deductions: DeductionData, regime: 'old' | 'new', capitalGainsTransactions: CapitalGainsTransaction[] = []) => {
+    let incomeFromSalary = incomeData.salary || 0;
+    let incomeFromInterest = incomeData.interestIncome || 0;
+    let incomeFromOtherSources = incomeData.otherIncome || 0;
+    let incomeFromBusiness = (incomeData.businessIncome || 0) + (incomeData.speculationIncome || 0) + (incomeData.fnoIncome || 0);
+
+    const taxOnCapitalGains = calculateCapitalGainsTax(capitalGainsTransactions);
+
+    let grossTotalIncome = incomeFromSalary + incomeFromInterest + incomeFromOtherSources + incomeFromBusiness;
+    let taxableIncome = grossTotalIncome;
+    let taxPayable = 0;
+
+    const standardDeduction = 50000;
+    if (incomeFromSalary > 0) {
+        taxableIncome -= standardDeduction;
     }
-  }
 
-  let prevLimit = 0;
-  let remainingNormalIncome = taxableIncomeNormal;
+    if (regime === 'old') {
+        let totalDeductions = 0;
+        totalDeductions += Math.min(deductions.section80C || 0, 150000);
+        totalDeductions += deductions.section80D || 0;
+        totalDeductions += Math.min(deductions.section80TTA || 0, 10000);
+        totalDeductions += Math.min(deductions.section80TTB || 0, 50000);
+        totalDeductions += deductions.section24B || 0;
+        totalDeductions += deductions.section80CCD1B || 0;
+        totalDeductions += deductions.section80CCD2 || 0;
+        totalDeductions += deductions.section80G || 0;
 
-  for (const slab of slabsToUse) {
-    if (remainingNormalIncome > 0) {
-      const slabRange = slab.limit - prevLimit;
-      const taxableInSlab = Math.min(remainingNormalIncome, slabRange);
-      const taxInSlab = taxableInSlab * slab.rate;
-      taxOnNormalIncome += taxInSlab;
-      
-      slabBreakdown.push({
-          range: `₹${prevLimit.toLocaleString('en-IN')} - ₹${slab.limit === Infinity ? 'Above' : slab.limit.toLocaleString('en-IN')}`,
-          amount: taxableInSlab,
-          rate: slab.rate * 100,
-          tax: taxInSlab
-      });
+        taxableIncome -= totalDeductions;
+        taxableIncome = Math.max(0, taxableIncome);
 
-      remainingNormalIncome -= taxableInSlab;
-      prevLimit = slab.limit;
-    } else {
-        break;
+        if (taxableIncome <= 250000) taxPayable = 0;
+        else if (taxableIncome <= 500000) taxPayable = (taxableIncome - 250000) * 0.05;
+        else if (taxableIncome <= 1000000) taxPayable = 12500 + (taxableIncome - 500000) * 0.20;
+        else taxPayable = 112500 + (taxableIncome - 1000000) * 0.30;
+        
+        if (grossTotalIncome <= 500000) {
+            taxPayable = Math.max(0, taxPayable - 12500);
+        }
+
+    } else { // New Regime
+        taxableIncome -= (deductions.section80CCD2 || 0);
+        taxableIncome = Math.max(0, taxableIncome);
+
+        if (taxableIncome <= 300000) taxPayable = 0;
+        else if (taxableIncome <= 600000) taxPayable = (taxableIncome - 300000) * 0.05;
+        else if (taxableIncome <= 900000) taxPayable = 15000 + (taxableIncome - 600000) * 0.10;
+        else if (taxableIncome <= 1200000) taxPayable = 45000 + (taxableIncome - 900000) * 0.15;
+        else if (taxableIncome <= 1500000) taxPayable = 90000 + (taxableIncome - 1200000) * 0.20;
+        else taxPayable = 150000 + (taxableIncome - 1500000) * 0.30;
+
+        if (grossTotalIncome <= 700000) {
+            taxPayable = Math.max(0, taxPayable - 25000);
+        }
     }
-  }
-  
-  // 3. Combine taxes and apply rebate/cess
-  const taxBeforeCess = taxOnNormalIncome + taxOnLTCG + taxOnSTCG;
-  
-  let rebate = 0;
-  if (rule.rebate87A && taxableIncome <= rule.rebate87A.limit) {
-    rebate = Math.min(taxBeforeCess, rule.rebate87A.maxRebate);
-  }
-  
-  const taxAfterRebate = Math.max(0, taxBeforeCess - rebate);
-  const cess = taxAfterRebate * (rule.cessRate || 0.04);
-  const totalTaxLiability = taxAfterRebate + cess;
+    
+    taxPayable += taxOnCapitalGains;
+    taxPayable += taxPayable * 0.04; // Cess
 
-  return {
-    taxableIncome,
-    taxableIncomeNormal,
-    taxOnNormalIncome,
-    taxOnLTCG,
-    taxOnSTCG,
-    taxBeforeCess,
-    rebate,
-    taxAfterRebate,
-    cess,
-    totalTaxLiability,
-    slabBreakdown,
-  };
-}
-
-
-/**
- * Calculates age from a date of birth string.
- * @param {string} dobStr - Date of birth in a string format (e.g., "YYYY-MM-DD" or "DD-MM-YYYY").
- * @returns {number} The calculated age, or 30 as a default if DOB is invalid.
- */
-export function calculateAge(dobStr: string) {
-  if (!dobStr) return 30;
-  // Try parsing YYYY-MM-DD first, then DD-MM-YYYY
-  let dob = new Date(dobStr);
-  if (isNaN(dob.getTime())) {
-    const parts = dobStr.split('-');
-    if (parts.length === 3) {
-        // Assuming DD-MM-YYYY
-        dob = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-    }
-  }
-
-  if (isNaN(dob.getTime())) return 30; // Return default if still invalid
-
-  const today = new Date();
-  let age = today.getFullYear() - dob.getFullYear();
-  const m = today.getMonth() - dob.getMonth();
-  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
-    age--;
-  }
-  return age;
-}
+    return Math.round(taxPayable);
+};
