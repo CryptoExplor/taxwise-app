@@ -3,20 +3,20 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { getAuth, onAuthStateChanged, signInAnonymously, signInWithCustomToken, User } from 'firebase/auth';
 import { collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
-import { db, auth as firebaseAuth, appId } from '@/lib/firebase';
-import type { ClientData } from '@/lib/types';
-import { computeTax, calculateCapitalGainsTax } from '@/lib/tax-calculator';
+import { app, db, auth as firebaseAuth, appId } from '@/lib/firebase';
+import type { Client } from '@/types';
+import { computeTax, calculateCapitalGainsTax } from '@/lib/tax';
 import { parseITRJson } from '@/lib/itr-parser';
-import { generatePdfReport, exportClientsToCsv } from '@/lib/pdf-exporter';
-import { getTaxAnalysis } from '@/ai/flows/tax-analysis-flow';
-import { v4 as uuidv4 } from 'uuid';
+import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
+import { getTaxRegimeSuggestion } from './actions';
 
-import { Upload, FileText, BarChart as BarChartIconLucide, Users, Search, Plus, Trash2, Edit, Download, Lightbulb, RefreshCw, Loader2 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+
+import { Upload, FileText, BarChart, Users, Search, Plus, Trash2, Edit, Download, Lightbulb, Loader2, RefreshCw } from 'lucide-react';
 
 const UploadIcon = Upload;
 const FileTextIcon = FileText;
-const BarChartIcon = BarChartIconLucide;
+const BarChartIcon = BarChart;
 const UsersIcon = Users;
 const SearchIcon = Search;
 const PlusIcon = Plus;
@@ -28,16 +28,18 @@ const RefreshCwIcon = RefreshCw;
 
 
 const BarChartComponent = ({ data }: { data: { name: string, value: number }[] }) => (
-    <ResponsiveContainer width="100%" height={300}>
-        <BarChart data={data} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="name" />
-            <YAxis />
-            <Tooltip />
-            <Legend />
-            <Bar dataKey="value" fill="#8884d8" name="Tax" />
-        </BarChart>
-    </ResponsiveContainer>
+    <div className="w-full h-64 flex items-end justify-around p-4 rounded-lg bg-gray-50 dark:bg-gray-800">
+        {data.map((item, index) => (
+            <div key={index} className="flex flex-col items-center mx-2">
+                <div
+                    className="w-10 rounded-t-md bg-primary transition-all duration-300 ease-in-out"
+                    style={{ height: `${(item.value / Math.max(...data.map(d => d.value), 1)) * 100}%` }}
+                ></div>
+                <span className="text-sm mt-1 text-gray-700 dark:text-gray-300">{item.name}</span>
+                <span className="text-xs text-gray-500 dark:text-gray-400">₹{item.value.toLocaleString('en-IN')}</span>
+            </div>
+        ))}
+    </div>
 );
 
 
@@ -73,15 +75,15 @@ const ConfirmationModal = ({ isOpen, message, onConfirm, onCancel }: { isOpen: b
 export default function Home() {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [isAuthReady, setIsAuthReady] = useState(false);
-    const [clients, setClients] = useState<ClientData[]>([]);
-    const [currentClient, setCurrentClient] = useState<Partial<ClientData> | null>(null);
+    const [clients, setClients] = useState<Client[]>([]);
+    const [currentClient, setCurrentClient] = useState<Partial<Client> | null>(null);
     const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard', 'upload', 'manual', 'computation'
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [clientToDeleteId, setClientToDeleteId] = useState<string | null>(null);
-    const [aiInsights, setAiInsights] = useState<{ summary: string; tips: string[] } | null>(null);
+    const [aiInsights, setAiInsights] = useState<string | null>(null);
     const [aiLoading, setAiLoading] = useState(false);
 
     // State for What-If Analysis
@@ -92,7 +94,7 @@ export default function Home() {
 
     // Initialize Firebase and handle authentication
     useEffect(() => {
-        if (!firebaseAuth || Object.keys(firebaseAuth).length === 0) {
+        if (!app || !db || !firebaseAuth || Object.keys(app).length === 0) {
             setMessage("Firebase is not initialized. Data persistence will not work.");
             setIsAuthReady(true); // Allow app to run without persistence
             return;
@@ -104,7 +106,7 @@ export default function Home() {
             } else {
                 // Sign in anonymously if no user is logged in
                 try {
-                     const token = (window as any).__initial_auth_token;
+                    const token = (window as any).__initial_auth_token;
                     if (token) {
                         await signInWithCustomToken(firebaseAuth, token);
                     } else {
@@ -129,7 +131,7 @@ export default function Home() {
                 const fetchedClients = snapshot.docs.map(doc => ({
                     id: doc.id,
                     ...doc.data()
-                } as ClientData));
+                } as Client));
                 setClients(fetchedClients);
                 setMessage('');
             }, (error) => {
@@ -140,8 +142,11 @@ export default function Home() {
         }
     }, [isAuthReady, currentUser]);
     
+    // Utility for generating random UUID (for anonymous users)
+    const generateUUID = () => crypto.randomUUID();
+
     // Save or update a client in Firestore
-    const saveClient = async (clientData: Partial<ClientData>) => {
+    const saveClient = async (clientData: Partial<Client>) => {
         if (!currentUser?.uid || !db || Object.keys(db).length === 0) {
             setMessage("Not authenticated or Firebase not available. Cannot save client.");
             return;
@@ -152,7 +157,7 @@ export default function Home() {
             // Recompute taxes before saving to ensure latest values
             const oldTax = computeTax(clientData.income!, clientData.deductions!, 'old', clientData.capitalGainsTransactions, clientData.dob);
             const newTax = computeTax(clientData.income!, clientData.deductions!, 'new', clientData.capitalGainsTransactions, clientData.dob);
-            const {id, ...dataToSave} = {
+            const clientDataToSave = {
                 ...clientData,
                 taxOldRegime: oldTax,
                 taxNewRegime: newTax,
@@ -161,12 +166,12 @@ export default function Home() {
             if (clientData.id) {
                 // Update existing client
                 const clientDocRef = doc(db, `artifacts/${appId}/users/${currentUser.uid}/clients`, clientData.id);
-                await updateDoc(clientDocRef, dataToSave);
+                await updateDoc(clientDocRef, clientDataToSave);
                 setMessage("Client updated successfully!");
             } else {
                 // Add new client
                 const clientsCollectionRef = collection(db, `artifacts/${appId}/users/${currentUser.uid}/clients`);
-                await addDoc(clientsCollectionRef, dataToSave);
+                await addDoc(clientsCollectionRef, clientDataToSave);
                 setMessage("Client added successfully!");
             }
             setCurrentClient(null); // Clear current client after saving
@@ -225,16 +230,17 @@ export default function Home() {
                 const fileContent = e.target?.result as string;
                 const parsedData = parseITRJson(fileContent);
 
-                const client: ClientData = {
-                    id: `temp-${uuidv4()}`,
-                    createdAt: new Date().toISOString(),
-                    ...parsedData
-                };
+                const initialCapitalGainsTransactions: any[] = []; // Keep empty for parsed, user can add manually if needed
 
-                client.taxOldRegime = computeTax(client.income, client.deductions, 'old', client.capitalGainsTransactions, client.dob),
-                client.taxNewRegime = computeTax(client.income, client.deductions, 'new', client.capitalGainsTransactions, client.dob),
-                
-                setCurrentClient(client);
+                setCurrentClient({
+                    id: undefined, // New client
+                    createdAt: new Date().toISOString(),
+                    ...parsedData,
+                    capitalGainsTransactions: initialCapitalGainsTransactions, // Ensure this field exists
+                    // Initialize tax computation results
+                    taxOldRegime: computeTax(parsedData.income, parsedData.deductions, 'old', initialCapitalGainsTransactions, parsedData.dob),
+                    taxNewRegime: computeTax(parsedData.income, parsedData.deductions, 'new', initialCapitalGainsTransactions, parsedData.dob),
+                });
                 setActiveTab('computation'); // Go to computation dashboard after upload
                 setMessage("File parsed successfully! Review and save.");
             } catch (error) {
@@ -250,7 +256,7 @@ export default function Home() {
     // Start a new manual computation
     const startNewManual = () => {
         setCurrentClient({
-            id: `temp-${uuidv4()}`,
+            id: undefined,
             createdAt: new Date().toISOString(),
             clientName: "",
             pan: "",
@@ -284,7 +290,7 @@ export default function Home() {
     };
 
     // Select an existing client for editing/viewing
-    const selectClient = (client: ClientData) => {
+    const selectClient = (client: Client) => {
         setCurrentClient(client);
         setActiveTab('computation'); // Show computation for selected client
         // Reset What-If inputs when a new client is selected
@@ -292,7 +298,6 @@ export default function Home() {
         setWhatIfDeduction(0);
         setWhatIfOldTax(0);
         setWhatIfNewTax(0);
-        setAiInsights(null);
     };
 
     // Handle changes in manual input fields and re-compute tax
@@ -360,7 +365,7 @@ export default function Home() {
                 capitalGainsTransactions: [
                     ...(prev.capitalGainsTransactions || []),
                     {
-                        id: uuidv4(), // Unique ID for key prop
+                        id: generateUUID(), // Unique ID for key prop
                         assetType: 'equity_listed',
                         purchaseDate: '',
                         saleDate: '',
@@ -402,23 +407,165 @@ export default function Home() {
         });
     };
 
-    // Get AI Insights
-    const getAiTaxInsightsHandler = async (clientData: ClientData) => {
+    // Function to generate PDF report
+    const generatePdfReport = (client: Partial<Client>) => {
+        if (typeof window === 'undefined') return;
+        const { jsPDF } = require('jspdf');
+        require('jspdf-autotable');
+        const doc = new jsPDF();
+
+        doc.setFontSize(18);
+        doc.text("TaxWise Tax Computation Report", 14, 22);
+        doc.setFontSize(12);
+        doc.text(`Client Name: ${client.clientName}`, 14, 30);
+        doc.text(`PAN: ${client.pan}`, 14, 37);
+        doc.text(`ITR Form Type: ${client.itrFormType}`, 14, 44);
+        doc.text(`Date: ${new Date().toLocaleDateString()}`, 14, 51);
+
+        // Income Summary
+        doc.setFontSize(14);
+        doc.text("Income Summary", 14, 65);
+        const incomeData = Object.entries(client.income!).map(([key, value]) => [
+            key.replace(/([A-Z])/g, ' $1').trim().replace('capitalGains', 'Total Capital Gains (from transactions)'),
+            `₹${value.toLocaleString('en-IN')}`
+        ]);
+        (doc as any).autoTable({
+            startY: 70,
+            head: [['Income Head', 'Amount']],
+            body: incomeData,
+            theme: 'striped',
+            styles: { font: 'Inter', fontSize: 10 },
+            headStyles: { fillColor: [23, 100, 191], textColor: 255 }, // Blue-600
+            alternateRowStyles: { fillColor: [243, 244, 246] }, // Gray-100
+            bodyStyles: { textColor: [55, 65, 81] }, // Gray-700
+            margin: { left: 14, right: 14 },
+        });
+
+        // Deductions Summary
+        doc.setFontSize(14);
+        doc.text("Deductions Summary", 14, (doc as any).autoTable.previous.finalY + 10);
+        const deductionsData = Object.entries(client.deductions!).map(([key, value]) => [
+            key.replace(/([A-Z])/g, ' $1').replace('section', 'Section '),
+            `₹${value.toLocaleString('en-IN')}`
+        ]);
+        (doc as any).autoTable({
+            startY: (doc as any).autoTable.previous.finalY + 15,
+            head: [['Deduction Section', 'Amount']],
+            body: deductionsData,
+            theme: 'striped',
+            styles: { font: 'Inter', fontSize: 10 },
+            headStyles: { fillColor: [23, 100, 191], textColor: 255 },
+            alternateRowStyles: { fillColor: [243, 244, 246] },
+            bodyStyles: { textColor: [55, 65, 81] },
+            margin: { left: 14, right: 14 },
+        });
+
+        // Tax Regime Comparison
+        doc.setFontSize(14);
+        doc.text("Tax Regime Comparison", 14, (doc as any).autoTable.previous.finalY + 10);
+        const taxComparisonData = [
+            ['Old Regime Tax', `₹${client.taxOldRegime!.toLocaleString('en-IN')}`],
+            ['New Regime Tax', `₹${client.taxNewRegime!.toLocaleString('en-IN')}`]
+        ];
+        (doc as any).autoTable({
+            startY: (doc as any).autoTable.previous.finalY + 15,
+            head: [['Regime', 'Tax Payable']],
+            body: taxComparisonData,
+            theme: 'striped',
+            styles: { font: 'Inter', fontSize: 10 },
+            headStyles: { fillColor: [23, 100, 191], textColor: 255 },
+            alternateRowStyles: { fillColor: [243, 244, 246] },
+            bodyStyles: { textColor: [55, 65, 81] },
+            margin: { left: 14, right: 14 },
+        });
+
+        doc.setFontSize(12);
+        const regimeComparisonMessage = client.taxOldRegime! < client.taxNewRegime!
+            ? `The Old Tax Regime seems more beneficial for this client, saving ₹${(client.taxNewRegime! - client.taxOldRegime!).toLocaleString('en-IN')}.`
+            : `The New Tax Regime seems more beneficial for this client, saving ₹${(client.taxOldRegime! - client.taxNewRegime!).toLocaleString('en-IN')}.`;
+        doc.text(regimeComparisonMessage, 14, (doc as any).autoTable.previous.finalY + 10);
+
+        doc.save(`${client.clientName}_Tax_Computation.pdf`);
+    };
+
+    // Function to export clients to CSV
+    const exportClientsToCsv = () => {
+        if (clients.length === 0) {
+            setMessage("No clients to export.");
+            return;
+        }
+
+        const headers = [
+            "ID", "Client Name", "PAN", "DOB", "Address", "ITR Form Type",
+            "Salary Income", "Interest Income", "Other Income", "Business Income",
+            "Speculation Income", "F&O Income/Loss",
+            "Section 80C", "Section 80CCD(1B)", "Section 80CCD(2)", "Section 80D",
+            "Section 80TTA", "Section 80TTB", "Section 80G", "Section 24B",
+            "Tax (Old Regime)", "Tax (New Regime)", "Created At"
+        ];
+
+        const csvRows = clients.map(client => {
+            const income = client.income || {};
+            const deductions = client.deductions || {};
+            return [
+                client.id,
+                `"${client.clientName}"`,
+                client.pan,
+                client.dob,
+                `"${(client.address || "").replace(/"/g, '""')}"`,
+                client.itrFormType,
+                income.salary,
+                income.interestIncome,
+                income.otherIncome,
+                income.businessIncome,
+                income.speculationIncome,
+                income.fnoIncome,
+                deductions.section80C,
+                deductions.section80CCD1B,
+                deductions.section80CCD2,
+                deductions.section80D,
+                deductions.section80TTA,
+                deductions.section80TTB,
+                deductions.section80G,
+                deductions.section24B,
+                client.taxOldRegime,
+                client.taxNewRegime,
+                client.createdAt,
+            ].join(',');
+        });
+
+        const csvString = [headers.join(','), ...csvRows].join('\n');
+        const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.setAttribute('download', 'taxwise_clients.csv');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setMessage("Clients exported to CSV successfully!");
+    };
+
+
+    // Placeholder for AI Tax Insights
+    const getAiTaxInsights = async (clientData: Partial<Client>) => {
         setAiLoading(true);
         setAiInsights(null);
         setMessage('');
         try {
-            const insights = await getTaxAnalysis(clientData);
-            setAiInsights(insights);
-            setMessage("AI insights generated successfully!");
-        } catch (error: any) {
+            const result = await getTaxRegimeSuggestion(clientData as Client);
+            if(result.success && result.data?.insights) {
+                setAiInsights(result.data.insights);
+                setMessage("AI insights generated successfully!");
+            } else {
+                setMessage(result.error || "Failed to get AI insights. Unexpected response structure.");
+            }
+        } catch (error) {
             console.error("Error fetching AI insights:", error);
-            setMessage(`Error generating AI insights: ${error.message}`);
+            setMessage(`Error generating AI insights: ${(error as Error).message}`);
         } finally {
             setAiLoading(false);
         }
     };
-
 
     // What-If Analysis Calculation
     const calculateWhatIfTax = () => {
@@ -471,7 +618,7 @@ export default function Home() {
                             <PlusIcon className="mr-2" /> New Manual Entry
                         </button>
                         <button
-                            onClick={() => exportClientsToCsv(clients)}
+                            onClick={exportClientsToCsv}
                             className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors duration-200 flex items-center shadow-md"
                             title="Export all client data to CSV"
                         >
@@ -513,7 +660,7 @@ export default function Home() {
                                                 <EditIcon className="inline-block w-5 h-5" />
                                             </button>
                                             <button
-                                                onClick={() => confirmDeleteClient(client.id!)}
+                                                onClick={() => confirmDeleteClient(client.id)}
                                                 className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 transition-colors duration-150"
                                                 title="Delete"
                                             >
@@ -552,13 +699,13 @@ export default function Home() {
                     <input id="dropzone-file" type="file" className="hidden" accept=".json" onChange={handleFileUpload} />
                 </label>
             </div>
-            {loading && <p className="text-blue-500 dark:text-blue-400 mt-4 text-center">Processing file...</p>}
-            {message && <p className={`text-sm ${message.includes('Error') ? 'text-red-500' : 'text-green-500'} mt-2 text-center`}>{message}</p>}
+            {loading && <p className="text-blue-500 dark:text-blue-400 mt-4">Processing file...</p>}
+            {message && <p className={`text-sm ${message.includes('Error') ? 'text-red-500' : 'text-green-500'} mt-2`}>{message}</p>}
         </div>
     );
 
     // Component for Manual Tax Computation
-    const ClientForm = ({ client, onSave, onChange, onCGChange, onAddCG, onRemoveCG, loading, message }: {client: Partial<ClientData> | null, onSave: (client: Partial<ClientData>)=>void, onChange: any, onCGChange: any, onAddCG: any, onRemoveCG: any, loading: boolean, message: string}) => {
+    const ClientForm = ({ client, onSave, onChange, onCGChange, onAddCG, onRemoveCG, loading, message }: {client: Partial<Client> | null, onSave: (client: Partial<Client>)=>void, onChange: any, onCGChange: any, onAddCG: any, onRemoveCG: any, loading: boolean, message: string}) => {
         const isNewClient = !client || !client.id;
 
         const handleSubmit = (e: React.FormEvent) => {
@@ -625,12 +772,30 @@ export default function Home() {
 
                     <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Income Details</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                        {client?.income && Object.keys(client.income).map(key => (
-                           <div key={key}>
-                               <label htmlFor={`income.${key}`} className="block text-sm font-medium text-gray-700 dark:text-gray-300 capitalize">{key.replace(/([A-Z])/g, ' $1')}</label>
-                               <input type="number" id={`income.${key}`} name={`income.${key}`} value={(client.income as any)[key]} onChange={onChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
-                           </div>
-                        ))}
+                        <div>
+                            <label htmlFor="income.salary" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Salary Income</label>
+                            <input type="number" id="income.salary" name="income.salary" value={client?.income?.salary || 0} onChange={onChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
+                        </div>
+                        <div>
+                            <label htmlFor="income.interestIncome" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Interest Income</label>
+                            <input type="number" id="income.interestIncome" name="income.interestIncome" value={client?.income?.interestIncome || 0} onChange={onChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
+                        </div>
+                        <div>
+                            <label htmlFor="income.otherIncome" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Other Income</label>
+                            <input type="number" id="income.otherIncome" name="income.otherIncome" value={client?.income?.otherIncome || 0} onChange={onChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
+                        </div>
+                        <div>
+                            <label htmlFor="income.businessIncome" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Business/Professional Income</label>
+                            <input type="number" id="income.businessIncome" name="income.businessIncome" value={client?.income?.businessIncome || 0} onChange={onChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
+                        </div>
+                        <div>
+                            <label htmlFor="income.speculationIncome" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Speculation Income (Intra-Day)</label>
+                            <input type="number" id="income.speculationIncome" name="income.speculationIncome" value={client?.income?.speculationIncome || 0} onChange={onChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
+                        </div>
+                        <div>
+                            <label htmlFor="income.fnoIncome" className="block text-sm font-medium text-gray-700 dark:text-gray-300">F&O Income/Loss</label>
+                            <input type="number" id="income.fnoIncome" name="income.fnoIncome" value={client?.income?.fnoIncome || 0} onChange={onChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
+                        </div>
                     </div>
 
                     <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Capital Gains Transactions</h3>
@@ -699,12 +864,38 @@ export default function Home() {
 
                     <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Deductions</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                       {client?.deductions && Object.keys(client.deductions).map(key => (
-                           <div key={key}>
-                               <label htmlFor={`deductions.${key}`} className="block text-sm font-medium text-gray-700 dark:text-gray-300 capitalize">{key.replace(/([A-Z])/g, ' $1').replace('section', 'Section ')}</label>
-                               <input type="number" id={`deductions.${key}`} name={`deductions.${key}`} value={(client.deductions as any)[key]} onChange={onChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
-                           </div>
-                       ))}
+                        <div>
+                            <label htmlFor="deductions.section80C" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Section 80C (Max ₹1.5L)</label>
+                            <input type="number" id="deductions.section80C" name="deductions.section80C" value={client?.deductions?.section80C || 0} onChange={onChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
+                        </div>
+                        <div>
+                            <label htmlFor="deductions.section80D" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Section 80D (Health Insurance)</label>
+                            <input type="number" id="deductions.section80D" name="deductions.section80D" value={client?.deductions?.section80D || 0} onChange={onChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
+                        </div>
+                        <div>
+                            <label htmlFor="deductions.section80TTA" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Section 80TTA (Savings Int. Max ₹10k)</label>
+                            <input type="number" id="deductions.section80TTA" name="deductions.section80TTA" value={client?.deductions?.section80TTA || 0} onChange={onChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
+                        </div>
+                        <div>
+                            <label htmlFor="deductions.section80TTB" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Section 80TTB (Sr. Citizen Int. Max ₹50k)</label>
+                            <input type="number" id="deductions.section80TTB" name="deductions.section80TTB" value={client?.deductions?.section80TTB || 0} onChange={onChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
+                        </div>
+                        <div>
+                            <label htmlFor="deductions.section80CCD1B" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Section 80CCD(1B) (NPS Own Cont. Max ₹50k)</label>
+                            <input type="number" id="deductions.section80CCD1B" name="deductions.section80CCD1B" value={client?.deductions?.section80CCD1B || 0} onChange={onChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
+                        </div>
+                        <div>
+                            <label htmlFor="deductions.section80CCD2" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Section 80CCD(2) (NPS Employer Cont.)</label>
+                            <input type="number" id="deductions.section80CCD2" name="deductions.section80CCD2" value={client?.deductions?.section80CCD2 || 0} onChange={onChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
+                        </div>
+                        <div>
+                            <label htmlFor="deductions.section80G" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Section 80G (Donations)</label>
+                            <input type="number" id="deductions.section80G" name="deductions.section80G" value={client?.deductions?.section80G || 0} onChange={onChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
+                        </div>
+                        <div>
+                            <label htmlFor="deductions.section24B" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Section 24B (Home Loan Interest)</label>
+                            <input type="number" id="deductions.section24B" name="deductions.section24B" value={client?.deductions?.section24B || 0} onChange={onChange} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
+                        </div>
                     </div>
 
                     <div className="flex justify-end space-x-4">
@@ -734,7 +925,7 @@ export default function Home() {
     };
 
     // Component for Computation Dashboard
-    const ComputationDashboard = ({ client, onSave, loading, message, aiInsights, aiLoading, onGetAiInsights }: {client: Partial<ClientData> | null, onSave: (client: Partial<ClientData>)=>void, loading: boolean, message: string, aiInsights: { summary: string; tips: string[] } | null, aiLoading: boolean, onGetAiInsights: (client: ClientData)=>void}) => {
+    const ComputationDashboard = ({ client, onSave, loading, message, aiInsights, aiLoading, onGetAiInsights }: {client: Partial<Client> | null, onSave: (client: Partial<Client>)=>void, loading: boolean, message: string, aiInsights: string | null, aiLoading: boolean, onGetAiInsights: (client: Partial<Client>)=>void}) => {
         if (!client) {
             return (
                 <div className="p-6 bg-white dark:bg-gray-900 rounded-lg shadow-md text-center text-gray-600 dark:text-gray-400">
@@ -749,8 +940,8 @@ export default function Home() {
         ];
 
         const regimeComparisonMessage = client.taxOldRegime! < client.taxNewRegime!
-            ? `The Old Tax Regime seems more beneficial, saving ₹${(client.taxNewRegime! - client.taxOldRegime!).toLocaleString('en-IN')}.`
-            : `The New Tax Regime seems more beneficial, saving ₹${(client.taxOldRegime! - client.taxNewRegime!).toLocaleString('en-IN')}.`;
+            ? `The Old Tax Regime seems more beneficial for this client, saving ₹${(client.taxNewRegime! - client.taxOldRegime!).toLocaleString('en-IN')}.`
+            : `The New Tax Regime seems more beneficial for this client, saving ₹${(client.taxOldRegime! - client.taxNewRegime!).toLocaleString('en-IN')}.`;
 
         // Recalculate capital gains tax for display purposes
         const totalCapitalGainsTax = calculateCapitalGainsTax(client.capitalGainsTransactions || []);
@@ -769,13 +960,39 @@ export default function Home() {
                     <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg shadow-inner">
                         <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-3">Income Summary</h3>
                         <ul className="space-y-2 text-gray-700 dark:text-gray-300">
-                           {client.income && Object.entries(client.income).map(([key, value]) => (
-                               <li key={key} className="flex justify-between"><span className="capitalize">{key.replace(/([A-Z])/g, ' $1')}</span><span className="font-medium">₹{Number(value).toLocaleString('en-IN')}</span></li>
-                           ))}
+                            <li className="flex justify-between">
+                                <span>Salary Income:</span>
+                                <span className="font-medium">₹{(client.income!.salary || 0).toLocaleString('en-IN')}</span>
+                            </li>
+                            <li className="flex justify-between">
+                                <span>Interest Income:</span>
+                                <span className="font-medium">₹{(client.income!.interestIncome || 0).toLocaleString('en-IN')}</span>
+                            </li>
+                            <li className="flex justify-between">
+                                <span>Other Income:</span>
+                                <span className="font-medium">₹{(client.income!.otherIncome || 0).toLocaleString('en-IN')}</span>
+                            </li>
+                            <li className="flex justify-between">
+                                <span>Business/Professional Income:</span>
+                                <span className="font-medium">₹{(client.income!.businessIncome || 0).toLocaleString('en-IN')}</span>
+                            </li>
+                            <li className="flex justify-between">
+                                <span>Speculation Income (Intra-Day):</span>
+                                <span className="font-medium">₹{(client.income!.speculationIncome || 0).toLocaleString('en-IN')}</span>
+                            </li>
+                            <li className="flex justify-between">
+                                <span>F&O Income/Loss:</span>
+                                <span className="font-medium">₹{(client.income!.fnoIncome || 0).toLocaleString('en-IN')}</span>
+                            </li>
                             <li className="flex justify-between font-bold text-lg border-t border-gray-200 dark:border-gray-600 pt-2 mt-2">
                                 <span>Total Income (Excl. Special Rate CG):</span>
                                 <span>₹{(
-                                    client.income ? Object.values(client.income).reduce((a,b) => a+b, 0) : 0
+                                    (client.income!.salary || 0) +
+                                    (client.income!.interestIncome || 0) +
+                                    (client.income!.otherIncome || 0) +
+                                    (client.income!.businessIncome || 0) +
+                                    (client.income!.speculationIncome || 0) +
+                                    (client.income!.fnoIncome || 0)
                                 ).toLocaleString('en-IN')}</span>
                             </li>
                             <li className="flex justify-between font-bold text-lg border-t border-gray-200 dark:border-gray-600 pt-2 mt-2">
@@ -789,15 +1006,15 @@ export default function Home() {
                     <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg shadow-inner">
                         <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-3">Deductions Summary</h3>
                         <ul className="space-y-2 text-gray-700 dark:text-gray-300">
-                            {client.deductions && Object.entries(client.deductions).map(([key, value]) => (
+                            {Object.entries(client.deductions!).map(([key, value]) => (
                                 <li key={key} className="flex justify-between">
                                     <span className="capitalize">{key.replace(/([A-Z])/g, ' $1').replace('section', 'Section ')}:</span>
-                                    <span className="font-medium">₹{Number(value).toLocaleString('en-IN')}</span>
+                                    <span className="font-medium">₹{value.toLocaleString('en-IN')}</span>
                                 </li>
                             ))}
                             <li className="flex justify-between font-bold text-lg border-t border-gray-200 dark:border-gray-600 pt-2 mt-2">
                                 <span>Total Deductions:</span>
-                                <span>₹{(client.deductions ? Object.values(client.deductions).reduce((sum, val) => sum + val, 0) : 0).toLocaleString('en-IN')}</span>
+                                <span>₹{(Object.values(client.deductions!).reduce((sum, val) => sum + val, 0)).toLocaleString('en-IN')}</span>
                             </li>
                         </ul>
                     </div>
@@ -879,7 +1096,7 @@ export default function Home() {
                 </h3>
                 <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg shadow-inner mb-6">
                     <button
-                        onClick={() => onGetAiInsights(client as ClientData)}
+                        onClick={() => onGetAiInsights(client)}
                         className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors duration-200 flex items-center justify-center shadow-md mb-4"
                         disabled={aiLoading}
                     >
@@ -893,10 +1110,7 @@ export default function Home() {
                     </button>
                     {aiInsights && (
                         <div className="mt-4 p-3 bg-white dark:bg-gray-700 rounded-md border border-gray-200 dark:border-gray-600 text-gray-800 dark:text-gray-200 whitespace-pre-wrap">
-                             <h4>Summary:</h4>
-                             <p>{aiInsights.summary}</p>
-                             <h4>Tips:</h4>
-                             <ul>{aiInsights.tips.map((tip, i) => <li key={i}>- {tip}</li>)}</ul>
+                            {aiInsights}
                         </div>
                     )}
                     {aiLoading && <p className="text-blue-500 dark:text-blue-400 mt-2">Generating insights...</p>}
@@ -924,7 +1138,7 @@ export default function Home() {
                         disabled={loading}
                     >
                         {loading ? (
-                             <Loader2 className="animate-spin h-5 w-5 text-white" />
+                            <Loader2 className="animate-spin h-5 w-5 text-white" />
                         ) : (
                             'Save Changes'
                         )}
@@ -953,7 +1167,7 @@ export default function Home() {
             <div className="flex flex-col lg:flex-row">
                 {/* Sidebar Navigation */}
                 <aside className="w-full lg:w-64 bg-white dark:bg-gray-900 lg:min-h-screen p-4 shadow-lg lg:shadow-md border-b lg:border-r border-gray-200 dark:border-gray-800">
-                    <div className="text-2xl font-bold text-blue-600 dark:text-blue-400 mb-6 text-center">TaxWise</div>
+                    <div className="text-2xl font-bold text-blue-600 dark:text-blue-400 mb-6 text-center">TaxGPT</div>
                     <nav>
                         <ul className="space-y-2">
                             <li>
@@ -1013,7 +1227,7 @@ export default function Home() {
                             message={message}
                             aiInsights={aiInsights}
                             aiLoading={aiLoading}
-                            onGetAiInsights={getAiTaxInsightsHandler}
+                            onGetAiInsights={getAiTaxInsights}
                         />
                     )}
                 </main>
@@ -1027,5 +1241,3 @@ export default function Home() {
         </div>
     );
 };
-
-export default App;

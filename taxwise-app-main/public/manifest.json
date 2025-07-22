@@ -1,0 +1,22 @@
+
+{
+  "name": "TaxWise - Smart ITR Analysis",
+  "short_name": "TaxWise",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F5F5F5",
+  "theme_color": "#3F51B5",
+  "description": "Upload your ITR JSON to get instant tax computation and a summary dashboard.",
+  "icons": [
+    {
+      "src": "/android-chrome-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/android-chrome-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
