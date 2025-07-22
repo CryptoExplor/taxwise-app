@@ -3,7 +3,7 @@
 
 import { useState, useRef, useTransition, useEffect } from "react";
 import { collection, addDoc, onSnapshot, query, orderBy, updateDoc, doc } from "firebase/firestore";
-import { UploadCloud, Loader, Download, Sparkles, BarChart, FileText, PlusCircle } from "lucide-react";
+import { UploadCloud, Loader, Download, Sparkles, BarChart, FileText, PlusCircle, ChevronDown, ChevronUp } from "lucide-react";
 import type { ClientData } from "@/lib/types";
 import { parseITR } from "@/lib/itr-parser";
 import { ClientCard } from "./client-card";
@@ -13,9 +13,13 @@ import { exportClientsToCSV } from "@/lib/csv-exporter";
 import { getTaxAnalysis, TaxAnalysisOutput } from "@/ai/flows/tax-analysis-flow";
 import { useAuth } from "./auth-provider";
 import { db } from "@/lib/firebase";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "./ui/card";
 import { computeTax } from "@/lib/tax-calculator";
 import { v4 as uuidv4 } from 'uuid';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { formatCurrency } from "@/lib/utils";
 
 export function Dashboard() {
   const { user, userProfile } = useAuth();
@@ -129,7 +133,7 @@ export function Dashboard() {
   const handleNewManualComputation = () => {
       const emptyTaxComputation = computeTax(0, 30, 'New', '2024-25', {
           salary: 0, houseProperty: 0, businessIncome: 0,
-          capitalGains: { shortTerm: 0, longTerm: 0 },
+          capitalGains: { shortTerm: 0, longTerm: 0, stcg: { purchase: 0, sale: 0, expenses: 0 }, ltcg: { purchase: 0, sale: 0, expenses: 0 } },
           otherSources: 0, grossTotalIncome: 0
       }, 0);
       
@@ -144,7 +148,11 @@ export function Dashboard() {
               age: 30,
               itrForm: 'Manual'
           },
-          incomeDetails: { salary: 0, houseProperty: 0, businessIncome: 0, capitalGains: { shortTerm: 0, longTerm: 0 }, otherSources: 0, grossTotalIncome: 0 },
+          incomeDetails: { 
+              salary: 0, houseProperty: 0, businessIncome: 0, 
+              capitalGains: { shortTerm: 0, longTerm: 0, stcg: { purchase: 0, sale: 0, expenses: 0 }, ltcg: { purchase: 0, sale: 0, expenses: 0 } },
+              otherSources: 0, grossTotalIncome: 0 
+          },
           deductions: { section80C: 0, section80D: 0, totalDeductions: 0 },
           taxesPaid: { tds: 0, selfAssessmentTax: 0, advanceTax: 0, totalTaxPaid: 0 },
           taxRegime: 'New',

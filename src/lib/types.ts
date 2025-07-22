@@ -6,8 +6,10 @@ export interface IncomeDetails {
   houseProperty: number;
   businessIncome: number;
   capitalGains: {
-    shortTerm: number;
-    longTerm: number;
+    stcg: { purchase: number; sale: number; expenses: number };
+    ltcg: { purchase: number; sale: number; expenses: number };
+    shortTerm: number; // This will hold the final computed STCG
+    longTerm: number; // This will hold the final computed LTCG
   };
   otherSources: number; // Catch-all for miscellaneous items
   interestIncomeFD?: number;

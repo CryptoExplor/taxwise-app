@@ -24,6 +24,7 @@ import {
   Scale,
   Trash2,
   FileText,
+  ChevronDown,
 } from "lucide-react";
 import { generatePDF } from "@/lib/pdf-exporter";
 import { useState, useTransition, useEffect, useMemo } from "react";
@@ -55,6 +56,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from "recharts";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
+import { Label } from "./ui/label";
 
 
 interface ClientCardProps {
@@ -115,6 +118,32 @@ const ComputationRow = ({
   );
 };
 
+const CapitalGainInputRow = ({ label, name, value, onChange, isReadOnly=false, isBold=false }: {
+    label: string;
+    name: string;
+    value: number;
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    isReadOnly?: boolean;
+    isBold?: boolean;
+}) => (
+    <div className="flex items-center justify-between">
+        <Label htmlFor={name} className={cn("text-sm", isBold && "font-semibold")}>{label}</Label>
+        <div className="flex items-center gap-2">
+            <span>₹</span>
+            <Input
+                id={name}
+                name={name}
+                type="number"
+                value={value}
+                onChange={onChange}
+                className="h-8 w-40 text-right"
+                readOnly={isReadOnly}
+                onFocus={(e) => e.target.select()}
+            />
+        </div>
+    </div>
+);
+
 
 export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
   const { user, userProfile } = useAuth();
@@ -154,8 +183,26 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
         return recomputeAll(newData);
     });
   };
+  
+  const handleCapitalGainChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'stcg' | 'ltcg') => {
+    const { name, value } = e.target;
+    const numericValue = parseFloat(value) || 0;
+
+    setEditableData(prev => {
+        const newData = JSON.parse(JSON.stringify(prev));
+        newData.incomeDetails.capitalGains[type][name as 'purchase' | 'sale' | 'expenses'] = numericValue;
+        return recomputeAll(newData);
+    });
+  }
 
   const recomputeAll = (data: ClientData): ClientData => {
+    // Recalculate capital gains totals
+    const stcgProfit = data.incomeDetails.capitalGains.stcg.sale - data.incomeDetails.capitalGains.stcg.purchase;
+    data.incomeDetails.capitalGains.shortTerm = stcgProfit - data.incomeDetails.capitalGains.stcg.expenses;
+
+    const ltcgProfit = data.incomeDetails.capitalGains.ltcg.sale - data.incomeDetails.capitalGains.ltcg.purchase;
+    data.incomeDetails.capitalGains.longTerm = ltcgProfit - data.incomeDetails.capitalGains.ltcg.expenses;
+
     // Recalculate Gross Total Income
     data.incomeDetails.grossTotalIncome = 
         data.incomeDetails.salary +
@@ -290,6 +337,14 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
       { name: 'New Regime', Tax: editableData.taxComparison.newRegime.totalTaxLiability },
   ] : [];
 
+  const stcg = editableData.incomeDetails.capitalGains.stcg;
+  const stcgProfit = stcg.sale - stcg.purchase;
+  const stcgTotalGain = stcgProfit - stcg.expenses;
+  
+  const ltcg = editableData.incomeDetails.capitalGains.ltcg;
+  const ltcgProfit = ltcg.sale - ltcg.purchase;
+  const ltcgTotalGain = ltcgProfit - ltcg.expenses;
+
   return (
     <Card className="flex flex-col hover:shadow-lg transition-shadow duration-300 w-full">
       <CardHeader>
@@ -407,6 +462,40 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
                 </table>
             )}
           </div>
+          
+           {isEditing && (
+            <Collapsible className="px-4 pt-4 mt-4 border-t">
+                <CollapsibleTrigger asChild>
+                    <Button variant="link" className="p-0 text-lg font-semibold flex items-center gap-2">
+                        <ChevronDown className="w-5 h-5 transition-transform group-data-[state=open]:rotate-180" />
+                        Capital Gains Manual Entry
+                    </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 py-4">
+                        <div className="space-y-3 p-4 border rounded-lg">
+                             <h4 className="font-semibold text-center">Short Term Capital Gain</h4>
+                             <CapitalGainInputRow label="Purchase" name="purchase" value={stcg.purchase} onChange={(e) => handleCapitalGainChange(e, 'stcg')} />
+                             <CapitalGainInputRow label="Sale" name="sale" value={stcg.sale} onChange={(e) => handleCapitalGainChange(e, 'stcg')} />
+                             <CapitalGainInputRow label="Expenses" name="expenses" value={stcg.expenses} onChange={(e) => handleCapitalGainChange(e, 'stcg')} />
+                             <Separator />
+                             <CapitalGainInputRow label="Profit/Loss" name="profit" value={stcgProfit} isReadOnly={true} />
+                             <CapitalGainInputRow label="Total Gain" name="total" value={stcgTotalGain} isReadOnly={true} isBold={true} />
+                        </div>
+                        <div className="space-y-3 p-4 border rounded-lg">
+                             <h4 className="font-semibold text-center">Long Term Capital Gain</h4>
+                             <CapitalGainInputRow label="Purchase" name="purchase" value={ltcg.purchase} onChange={(e) => handleCapitalGainChange(e, 'ltcg')} />
+                             <CapitalGainInputRow label="Sale" name="sale" value={ltcg.sale} onChange={(e) => handleCapitalGainChange(e, 'ltcg')} />
+                             <CapitalGainInputRow label="Expenses" name="expenses" value={ltcg.expenses} onChange={(e) => handleCapitalGainChange(e, 'ltcg')} />
+                             <Separator />
+                             <CapitalGainInputRow label="Profit/Loss" name="profit" value={ltcgProfit} isReadOnly={true} />
+                             <CapitalGainInputRow label="Total Gain" name="total" value={ltcgTotalGain} isReadOnly={true} isBold={true} />
+                        </div>
+                    </div>
+                </CollapsibleContent>
+            </Collapsible>
+        )}
+
       </CardContent>
       <CardFooter className="flex-col items-stretch gap-4 p-4 bg-muted/50 rounded-b-lg mt-4">
         <div className="flex gap-2 justify-between w-full">

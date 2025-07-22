@@ -93,6 +93,8 @@ export async function parseITR(file: File): Promise<ClientDataToSave> {
       capitalGains: {
         shortTerm: get(jsonData, 'ScheduleCG.ShortTermCapGain.TotalShortTermCapGain', 0),
         longTerm: get(jsonData, 'ScheduleCG.LongTermCapGain.TotalLongTermCapGain', 0),
+        stcg: { purchase: 0, sale: 0, expenses: 0 },
+        ltcg: { purchase: 0, sale: 0, expenses: 0 },
       },
       interestIncomeFD: interestIncomeFD,
       interestIncomeSaving: interestIncomeSaving,
