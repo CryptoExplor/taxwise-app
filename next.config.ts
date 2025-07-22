@@ -1,6 +1,7 @@
+
 import type {NextConfig} from 'next';
 
-const nextConfig: NextConfig = {
+const config: NextConfig = {
   /* config options here */
   typescript: {
     ignoreBuildErrors: true,
@@ -18,6 +19,9 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  experimental: {
+    allowedDevOrigins: ["https://6000-firebase-studio-1753016963200.cluster-ikxjzjhlifcwuroomfkjrx437g.cloudworkstations.dev"]
+  },
 };
 
-export default nextConfig;
+export default config;
