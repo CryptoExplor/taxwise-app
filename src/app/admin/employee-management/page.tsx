@@ -14,7 +14,6 @@ import {
   where,
 } from "firebase/firestore";
 import { useAuth } from "@/components/auth-provider";
-import { useToast } from "@/hooks/use-toast";
 
 interface User {
   id: string;
@@ -26,7 +25,6 @@ interface User {
 
 export default function EmployeeManagementPage() {
   const { user: currentUser } = useAuth();
-  const { toast } = useToast();
   const [users, setUsers] = useState<User[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string>("");
   const [caUserEmail, setCaUserEmail] = useState("");
@@ -49,11 +47,7 @@ export default function EmployeeManagementPage() {
       setCaUsers(caUsersList);
     } catch (error) {
       console.error("Error loading users:", error);
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to load users for employee management.",
-      });
+      alert("Failed to load users for employee management.");
     } finally {
       setLoading(false);
     }
@@ -63,15 +57,11 @@ export default function EmployeeManagementPage() {
     if (currentUser) {
       loadData();
     }
-  }, [currentUser, toast]);
+  }, [currentUser]);
 
   const assignEmployeeToCA = async () => {
     if (!selectedUserId || !caUserEmail) {
-      toast({
-        variant: "destructive",
-        title: "Input Required",
-        description: "Please select a user and a CA email.",
-      });
+      alert("Please select a user and a CA email.");
       return;
     }
 
@@ -85,11 +75,7 @@ export default function EmployeeManagementPage() {
       const caUserSnap = await getDocs(caUserQuery);
 
       if (caUserSnap.empty) {
-        toast({
-          variant: "destructive",
-          title: "Not Found",
-          description: "CA user with this email not found.",
-        });
+        alert("CA user with this email not found.");
         setActionLoading(false);
         return;
       }
@@ -103,20 +89,13 @@ export default function EmployeeManagementPage() {
         role: "employee",
       });
 
-      toast({
-        title: "Success",
-        description: "Successfully assigned employee.",
-      });
+      alert("Successfully assigned employee.");
       loadData();
       setSelectedUserId("");
       setCaUserEmail("");
     } catch (error: any) {
       console.error("Error assigning employee:", error);
-      toast({
-        variant: "destructive",
-        title: "Assignment Failed",
-        description: error.message,
-      });
+      alert(`Assignment Failed: ${error.message}`);
     } finally {
       setActionLoading(false);
     }
@@ -131,18 +110,11 @@ export default function EmployeeManagementPage() {
         role: "user",
       });
 
-      toast({
-        title: "Success",
-        description: "Successfully removed employee assignment.",
-      });
+      alert("Successfully removed employee assignment.");
       loadData();
     } catch (error: any) {
       console.error("Error removing assignment:", error);
-      toast({
-        variant: "destructive",
-        title: "Removal Failed",
-        description: error.message,
-      });
+      alert(`Removal Failed: ${error.message}`);
     } finally {
       setActionLoading(false);
     }
@@ -157,10 +129,10 @@ export default function EmployeeManagementPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
           <div className="space-y-2">
             <label htmlFor="user-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Select User to Assign:</label>
-            <select 
-              id="user-select" 
-              onChange={(e) => setSelectedUserId(e.target.value)} 
-              value={selectedUserId} 
+            <select
+              id="user-select"
+              onChange={(e) => setSelectedUserId(e.target.value)}
+              value={selectedUserId}
               disabled={actionLoading}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
             >
@@ -186,9 +158,9 @@ export default function EmployeeManagementPage() {
                     disabled={actionLoading}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                 />
-                 <select 
-                    onChange={(e) => setCaUserEmail(e.target.value)} 
-                    value={caUserEmail} 
+                 <select
+                    onChange={(e) => setCaUserEmail(e.target.value)}
+                    value={caUserEmail}
                     disabled={actionLoading}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                  >

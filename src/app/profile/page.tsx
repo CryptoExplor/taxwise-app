@@ -5,7 +5,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { doc, getDoc, updateDoc, setDoc } from 'firebase/firestore';
 import { useAuth } from '@/components/auth-provider';
 import { db } from '@/lib/firebase';
-import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 
 const UserIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-10 w-10 text-blue-600"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>;
@@ -21,7 +20,6 @@ interface UserProfile {
 
 const ProfilePage = () => {
     const { user } = useAuth();
-    const { toast } = useToast();
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [isEditing, setIsEditing] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
@@ -58,15 +56,11 @@ const ProfilePage = () => {
             }
         } catch (error) {
             console.error("Error fetching profile:", error);
-            toast({
-                variant: 'destructive',
-                title: 'Error',
-                description: 'Failed to fetch your profile data.',
-            });
+            alert('Failed to fetch your profile data.');
         } finally {
             setIsLoading(false);
         }
-    }, [user, toast]);
+    }, [user]);
 
     useEffect(() => {
         fetchProfile();
@@ -80,7 +74,7 @@ const ProfilePage = () => {
 
     const handleSave = async () => {
         if (!user || !profile || user.isAnonymous) {
-            toast({ title: 'Error', description: 'Cannot save profile for anonymous user.', variant: 'destructive' });
+            alert('Cannot save profile for anonymous user.');
             return;
         };
         setIsSaving(true);
@@ -92,18 +86,11 @@ const ProfilePage = () => {
                 phone: profile.phone,
                 address: profile.address,
             });
-            toast({
-                title: 'Success',
-                description: 'Your profile has been updated.',
-            });
+            alert('Your profile has been updated.');
             setIsEditing(false);
         } catch (error) {
             console.error("Error updating profile:", error);
-            toast({
-                variant: 'destructive',
-                title: 'Error',
-                description: 'Failed to update your profile.',
-            });
+            alert('Failed to update your profile.');
         } finally {
             setIsSaving(false);
         }

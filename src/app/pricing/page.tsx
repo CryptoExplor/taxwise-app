@@ -3,7 +3,6 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/components/auth-provider';
 
 const Check = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 text-green-500"><path d="M20 6 9 17l-5-5"/></svg>;
@@ -61,24 +60,16 @@ const tiers = [
 ];
 
 const PricingPage = () => {
-    const { toast } = useToast();
     const { user, userProfile } = useAuth();
     
     const handleSubscription = async (priceId: string) => {
         if (!user || !userProfile) {
-            toast({
-                variant: 'destructive',
-                title: 'Authentication Error',
-                description: 'You must be logged in to subscribe.',
-            });
+            alert('You must be logged in to subscribe.');
             return;
         }
 
         // Feature not implemented message
-        toast({
-            title: "Feature Coming Soon",
-            description: "Subscription functionality is not yet implemented.",
-        });
+        alert("Subscription functionality is not yet implemented.");
     };
 
     return (

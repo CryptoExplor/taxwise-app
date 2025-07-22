@@ -9,7 +9,6 @@ import {
   doc,
   updateDoc,
 } from "firebase/firestore";
-import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/components/auth-provider";
 
 
@@ -29,7 +28,6 @@ export default function UserPlansPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
-  const { toast } = useToast();
 
   useEffect(() => {
     const loadUsers = async () => {
@@ -43,11 +41,7 @@ export default function UserPlansPage() {
         setUsers(data);
         } catch (error) {
         console.error("Error loading users:", error);
-        toast({
-            variant: "destructive",
-            title: "Error",
-            description: "Failed to load users.",
-        });
+        alert("Failed to load users.");
         } finally {
         setLoading(false);
         }
@@ -56,36 +50,25 @@ export default function UserPlansPage() {
     if (currentUser) {
         loadUsers();
     }
-  }, [currentUser, toast]);
+  }, [currentUser]);
 
 
   const handlePlanChange = async (userId: string, newPlan: string) => {
     if (!userId || !newPlan) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Invalid user or plan selected.",
-      });
+      alert("Invalid user or plan selected.");
       return;
     }
     setUpdating(userId);
     try {
       const userRef = doc(db, "users", userId);
       await updateDoc(userRef, { plan: newPlan });
-      toast({
-        title: "Success",
-        description: `Plan updated to ${newPlan}.`,
-      });
+      alert(`Plan updated to ${newPlan}.`);
       setUsers((prevUsers) =>
         prevUsers.map((u) => (u.id === userId ? { ...u, plan: newPlan } : u))
       );
     } catch (error) {
       console.error("Error updating plan:", error);
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Failed to update plan.",
-      });
+      alert("Failed to update plan.");
     } finally {
       setUpdating(null);
     }
