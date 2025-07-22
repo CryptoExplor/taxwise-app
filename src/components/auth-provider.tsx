@@ -25,7 +25,15 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({ user: null, userProfile: null, loading: true });
 
 const publicRoutes = ['/login', '/pricing', '/contact', '/calculator'];
-const protectedRoutes = ['/', '/profile', '/admin'];
+
+const isProtectedRoute = (pathname: string) => {
+    if (publicRoutes.includes(pathname)) {
+        return false;
+    }
+    // Handle dynamic routes or catch-all protected routes if needed
+    // e.g. if (pathname.startsWith('/admin')) return true;
+    return true; // Default to protected
+}
 
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -56,9 +64,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     if (loading) return;
 
-    const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route));
+    const protectedRoute = isProtectedRoute(pathname);
     
-    if (!user && isProtectedRoute) {
+    if (!user && protectedRoute) {
       router.push('/login');
     } 
     else if (user && pathname === '/login') {
@@ -67,8 +75,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   }, [user, loading, pathname, router]);
 
-  const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route));
-  if (loading && isProtectedRoute) {
+  if (loading && isProtectedRoute(pathname)) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="text-center">
