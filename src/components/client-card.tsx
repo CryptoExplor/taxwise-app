@@ -118,33 +118,6 @@ const ComputationRow = ({
   );
 };
 
-const CapitalGainInputRow = ({ label, name, value, onChange, isReadOnly=false, isBold=false }: {
-    label: string;
-    name: string;
-    value: number;
-    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-    isReadOnly?: boolean;
-    isBold?: boolean;
-}) => (
-    <div className="flex items-center justify-between">
-        <Label htmlFor={name} className={cn("text-sm", isBold && "font-semibold")}>{label}</Label>
-        <div className="flex items-center gap-2">
-            <span>₹</span>
-            <Input
-                id={name}
-                name={name}
-                type="number"
-                value={value}
-                onChange={onChange}
-                className="h-8 w-40 text-right"
-                readOnly={isReadOnly}
-                onFocus={(e) => e.target.select()}
-            />
-        </div>
-    </div>
-);
-
-
 export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
   const { user, userProfile } = useAuth();
   const { toast } = useToast();
@@ -340,12 +313,13 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
   ] : [];
 
   const stcg = editableData.incomeDetails.capitalGains.stcg;
-  const stcgProfit = stcg.sale - stcg.purchase;
-  const stcgTotalGain = stcgProfit - stcg.expenses;
+  const stcgProfit = stcg.sale - stcg.purchase - stcg.expenses;
   
   const ltcg = editableData.incomeDetails.capitalGains.ltcg;
-  const ltcgProfit = ltcg.sale - ltcg.purchase;
-  const ltcgTotalGain = ltcgProfit - ltcg.expenses;
+  const ltcgProfit = ltcg.sale - ltcg.purchase - ltcg.expenses;
+  
+  const computeCapitalGain = (data: {sale: number, purchase: number, expenses: number}) => (data.sale - data.purchase - data.expenses);
+
 
   return (
     <Card className="flex flex-col hover:shadow-lg transition-shadow duration-300 w-full">
@@ -473,30 +447,68 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
           </div>
           
            
-        <div className="px-4 pt-4 mt-4 border-t">
-            <h4 className="text-lg font-semibold mb-2">
-                Capital Gains Manual Entry
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 py-4">
-                <div className="space-y-3 p-4 border rounded-lg">
-                        <h4 className="font-semibold text-center">Short Term Capital Gain</h4>
-                        <CapitalGainInputRow label="Purchase" name="purchase" value={stcg.purchase} onChange={(e) => handleCapitalGainChange(e, 'stcg')} isReadOnly={!isEditing}/>
-                        <CapitalGainInputRow label="Sale" name="sale" value={stcg.sale} onChange={(e) => handleCapitalGainChange(e, 'stcg')} isReadOnly={!isEditing}/>
-                        <CapitalGainInputRow label="Expenses" name="expenses" value={stcg.expenses} onChange={(e) => handleCapitalGainChange(e, 'stcg')} isReadOnly={!isEditing}/>
-                        <Separator />
-                        <CapitalGainInputRow label="Profit/Loss" name="profit" value={stcgProfit} onChange={()=>{}} isReadOnly={true} />
-                        <CapitalGainInputRow label="Total Gain" name="total" value={stcgTotalGain} onChange={()=>{}} isReadOnly={true} isBold={true} />
-                </div>
-                <div className="space-y-3 p-4 border rounded-lg">
-                        <h4 className="font-semibold text-center">Long Term Capital Gain</h4>
-                        <CapitalGainInputRow label="Purchase" name="purchase" value={ltcg.purchase} onChange={(e) => handleCapitalGainChange(e, 'ltcg')} isReadOnly={!isEditing}/>
-                        <CapitalGainInputRow label="Sale" name="sale" value={ltcg.sale} onChange={(e) => handleCapitalGainChange(e, 'ltcg')} isReadOnly={!isEditing}/>
-                        <CapitalGainInputRow label="Expenses" name="expenses" value={ltcg.expenses} onChange={(e) => handleCapitalGainChange(e, 'ltcg')} isReadOnly={!isEditing}/>
-                        <Separator />
-                        <CapitalGainInputRow label="Profit/Loss" name="profit" value={ltcgProfit} onChange={()=>{}} isReadOnly={true} />
-                        <CapitalGainInputRow label="Total Gain" name="total" value={ltcgTotalGain} onChange={()=>{}} isReadOnly={true} isBold={true} />
-                </div>
-            </div>
+        <div className="p-4 mt-4 border-t">
+             <Card className="bg-muted/30 shadow-sm">
+                <CardHeader>
+                    <CardTitle>Capital Gains Manual Entry</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    {([
+                    { type: 'stcg', label: 'Short Term' },
+                    { type: 'ltcg', label: 'Long Term' }
+                    ] as const).map(({ type, label }) => (
+                    <div key={type}>
+                        <h4 className="font-semibold text-md text-muted-foreground mb-2">
+                        {label} Capital Gain
+                        </h4>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                            <Label htmlFor={`${type}-purchase`}>Purchase</Label>
+                            <Input
+                                id={`${type}-purchase`}
+                                name="purchase"
+                                type="number"
+                                value={editableData.incomeDetails.capitalGains[type].purchase}
+                                onChange={(e) => handleCapitalGainChange(e, type)}
+                                readOnly={!isEditing}
+                            />
+                        </div>
+                        <div>
+                            <Label htmlFor={`${type}-sale`}>Sale</Label>
+                            <Input
+                                id={`${type}-sale`}
+                                name="sale"
+                                type="number"
+                                value={editableData.incomeDetails.capitalGains[type].sale}
+                                onChange={(e) => handleCapitalGainChange(e, type)}
+                                readOnly={!isEditing}
+                            />
+                        </div>
+                        <div>
+                            <Label htmlFor={`${type}-expenses`}>Expenses</Label>
+                            <Input
+                                id={`${type}-expenses`}
+                                name="expenses"
+                                type="number"
+                                value={editableData.incomeDetails.capitalGains[type].expenses}
+                                onChange={(e) => handleCapitalGainChange(e, type)}
+                                readOnly={!isEditing}
+                            />
+                        </div>
+                        <div>
+                            <Label>Profit / Loss</Label>
+                            <Input
+                            readOnly
+                            disabled
+                            value={formatCurrency(computeCapitalGain(editableData.incomeDetails.capitalGains[type]))}
+                            className="font-semibold"
+                            />
+                        </div>
+                        </div>
+                    </div>
+                    ))}
+                </CardContent>
+            </Card>
         </div>
         
 
