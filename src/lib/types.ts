@@ -1,6 +1,12 @@
 
 import type { Timestamp } from 'firebase/firestore';
 
+export interface CustomIncome {
+  id: string;
+  label: string;
+  value: number;
+}
+
 export interface IncomeDetails {
   salary: number;
   houseProperty: number;
@@ -16,6 +22,7 @@ export interface IncomeDetails {
   interestIncomeSaving?: number;
   dividendIncome?: number;
   grossTotalIncome: number;
+  customIncomes?: CustomIncome[];
 }
 
 export interface CustomDeduction {
@@ -104,3 +111,5 @@ export interface ClientData extends ClientDataToSave {
   id: string;
   createdAt: Timestamp; // Firestore returns a Timestamp object
 }
+
+    

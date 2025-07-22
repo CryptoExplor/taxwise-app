@@ -135,14 +135,45 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
   }, [client, isEditing, isNewClient]);
 
 
-  const handleIncomeChange = (field: keyof Omit<ClientData['incomeDetails'], 'capitalGains' | 'grossTotalIncome'>, value: string) => {
-        const numericValue = parseFloat(value) || 0;
-        setEditableData(prev => {
-            const newIncomeDetails = { ...prev.incomeDetails, [field]: numericValue };
-            const newData = { ...prev, incomeDetails: newIncomeDetails };
-            return recomputeAll(newData);
-        });
+ const handleIncomeChange = (field: keyof Omit<ClientData['incomeDetails'], 'capitalGains' | 'grossTotalIncome' | 'customIncomes'>, value: string) => {
+    const numericValue = parseFloat(value) || 0;
+    setEditableData(prev => {
+        const newIncomeDetails = { ...prev.incomeDetails, [field]: numericValue };
+        const newData = { ...prev, incomeDetails: newIncomeDetails };
+        return recomputeAll(newData);
+    });
   };
+
+  const handleCustomIncomeChange = (id: string, field: 'label' | 'value', value: string | number) => {
+    setEditableData(prev => {
+        const newCustomIncomes = prev.incomeDetails.customIncomes?.map(d => {
+            if (d.id === id) {
+                return { ...d, [field]: field === 'value' ? (parseFloat(value as string) || 0) : value };
+            }
+            return d;
+        });
+        const newIncomeDetails = { ...prev.incomeDetails, customIncomes: newCustomIncomes };
+        return recomputeAll({ ...prev, incomeDetails: newIncomeDetails });
+    });
+  };
+
+  const handleAddCustomIncome = () => {
+      setEditableData(prev => {
+          const newIncome = { id: `custom_income_${Date.now()}`, label: '', value: 0 };
+          const customIncomes = [...(prev.incomeDetails.customIncomes || []), newIncome];
+          const newIncomeDetails = { ...prev.incomeDetails, customIncomes };
+          return { ...prev, incomeDetails: newIncomeDetails };
+      });
+  };
+
+  const handleRemoveCustomIncome = (id: string) => {
+      setEditableData(prev => {
+          const customIncomes = prev.incomeDetails.customIncomes?.filter(d => d.id !== id);
+          const newIncomeDetails = { ...prev.incomeDetails, customIncomes };
+          return recomputeAll({ ...prev, incomeDetails: newIncomeDetails });
+      });
+  };
+
 
   const handleDeductionChange = (field: keyof Omit<ClientData['deductions'], 'totalDeductions' | 'customDeductions'>, value: string) => {
     const numericValue = parseFloat(value) || 0;
@@ -168,7 +199,7 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
 
   const handleAddCustomDeduction = () => {
       setEditableData(prev => {
-          const newDeduction = { id: `custom_${Date.now()}`, label: '', value: 0 };
+          const newDeduction = { id: `custom_deduction_${Date.now()}`, label: '', value: 0 };
           const customDeductions = [...(prev.deductions.customDeductions || []), newDeduction];
           const newDeductions = { ...prev.deductions, customDeductions };
           return { ...prev, deductions: newDeductions };
@@ -212,6 +243,7 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
     data.incomeDetails.capitalGains.longTerm = ltcgProfit - data.incomeDetails.capitalGains.ltcg.expenses;
 
     // Recalculate Gross Total Income
+    const customIncomesTotal = data.incomeDetails.customIncomes?.reduce((acc, d) => acc + d.value, 0) || 0;
     data.incomeDetails.grossTotalIncome = 
         data.incomeDetails.salary +
         data.incomeDetails.houseProperty +
@@ -221,7 +253,8 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
         (data.incomeDetails.interestIncomeFD || 0) +
         (data.incomeDetails.interestIncomeSaving || 0) +
         (data.incomeDetails.dividendIncome || 0) +
-        data.incomeDetails.otherSources;
+        data.incomeDetails.otherSources +
+        customIncomesTotal;
     
     // Recalculate Total Deductions from both standard and custom fields
     const customDeductionsTotal = data.deductions.customDeductions?.reduce((acc, d) => acc + d.value, 0) || 0;
@@ -344,6 +377,16 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
   ] : [];
 
   const computeCapitalGain = (data: {sale: number, purchase: number, expenses: number}) => (data.sale - data.purchase - data.expenses);
+  
+  const standardIncomeFields = [
+      { key: 'salary', label: 'Salary' },
+      { key: 'houseProperty', label: 'House Property' },
+      { key: 'businessIncome', label: 'Business Income' },
+      { key: 'interestIncomeFD', label: 'Interest from FD' },
+      { key: 'interestIncomeSaving', label: 'Interest from Savings' },
+      { key: 'dividendIncome', label: 'Dividend Income' },
+      { key: 'otherSources', label: 'Other Sources (Misc.)' },
+  ] as const;
 
   const regularDeductions = [
     { key: 'section80C', label: 'Section 80C' },
@@ -471,19 +514,44 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
                 </CardHeader>
                 <CardContent className="space-y-4">
                      <div className="grid grid-cols-2 gap-4">
-                        {(['salary', 'houseProperty', 'businessIncome', 'interestIncomeFD', 'interestIncomeSaving', 'dividendIncome', 'otherSources'] as const).map(field => (
-                            <div key={field}>
-                                <Label htmlFor={field} className="capitalize">{field.replace(/([A-Z])/g, ' $1').replace('F D', 'FD')}</Label>
+                        {standardIncomeFields.map(field => (
+                            <div key={field.key}>
+                                <Label htmlFor={field.key} className="capitalize">{field.label}</Label>
                                 <Input
-                                    id={field}
+                                    id={field.key}
                                     type="number"
-                                    value={editableData.incomeDetails[field] || 0}
-                                    onChange={(e) => handleIncomeChange(field, e.target.value)}
+                                    value={editableData.incomeDetails[field.key] || 0}
+                                    onChange={(e) => handleIncomeChange(field.key, e.target.value)}
                                     readOnly={!isEditing}
                                 />
                             </div>
                         ))}
                     </div>
+                     <Separator className="my-6"/>
+                    <h4 className="font-semibold text-md text-muted-foreground">Custom Income</h4>
+                    {editableData.incomeDetails.customIncomes?.map((income) => (
+                        <div key={income.id} className="grid grid-cols-[1fr,1fr,auto] gap-2 items-center">
+                            <Input
+                                placeholder="Income Source Name"
+                                value={income.label}
+                                onChange={(e) => handleCustomIncomeChange(income.id, 'label', e.target.value)}
+                                readOnly={!isEditing}
+                            />
+                             <Input
+                                type="number"
+                                placeholder="Amount"
+                                value={income.value}
+                                onChange={(e) => handleCustomIncomeChange(income.id, 'value', e.target.value)}
+                                readOnly={!isEditing}
+                            />
+                            <Button variant="ghost" size="icon" onClick={() => handleRemoveCustomIncome(income.id)} disabled={!isEditing}>
+                                <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
+                        </div>
+                    ))}
+                    <Button variant="outline" size="sm" onClick={handleAddCustomIncome} disabled={!isEditing}>
+                        <Plus className="w-4 h-4 mr-2" /> Add Custom Income
+                    </Button>
                 </CardContent>
              </Card>
 
@@ -662,3 +730,7 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
     </Card>
   );
 }
+
+    
+
+    
