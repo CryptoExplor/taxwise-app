@@ -15,6 +15,8 @@ import { formatCurrency } from '@/lib/utils';
 import { ArrowLeft, Calculator as CalculatorIcon, ReceiptText, Landmark, Scale } from 'lucide-react';
 import Link from 'next/link';
 import { Separator } from '@/components/ui/separator';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from "recharts";
+
 
 const calculatorSchema = z.object({
     grossTotalIncome: z.number().min(0, "Income must be a positive number."),
@@ -97,6 +99,11 @@ export default function TaxCalculatorPage() {
             <p className="font-medium">{typeof value === 'number' ? formatCurrency(value) : value}</p>
         </div>
     );
+    
+    const chartData = comparisonResult ? [
+        { name: 'Old Regime', Tax: comparisonResult.oldRegimeTax },
+        { name: 'New Regime', Tax: comparisonResult.newRegimeTax },
+    ] : [];
 
     return (
         <div className="container mx-auto max-w-4xl py-12 px-4">
@@ -237,22 +244,24 @@ export default function TaxCalculatorPage() {
                                 <CardDescription>See which regime saves you more tax.</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-4">
-                                <div className="flex justify-around text-center">
-                                    <div>
-                                        <p className="text-muted-foreground font-semibold">Old Regime</p>
-                                        <p className="text-lg font-bold">{formatCurrency(comparisonResult.oldRegimeTax)}</p>
-                                    </div>
-                                     <div>
-                                        <p className="text-muted-foreground font-semibold">New Regime</p>
-                                        <p className="text-lg font-bold">{formatCurrency(comparisonResult.newRegimeTax)}</p>
-                                    </div>
-                                </div>
                                 <div className="p-3 rounded-md text-center font-semibold bg-accent/10 text-accent-foreground">
                                     {comparisonResult.oldRegimeTax < comparisonResult.newRegimeTax
                                         ? `The Old Regime seems more beneficial, saving you ${formatCurrency(comparisonResult.newRegimeTax - comparisonResult.oldRegimeTax)}.`
                                         : comparisonResult.newRegimeTax < comparisonResult.oldRegimeTax
                                         ? `The New Regime seems more beneficial, saving you ${formatCurrency(comparisonResult.oldRegimeTax - comparisonResult.newRegimeTax)}.`
                                         : `Both regimes result in the same tax liability.`}
+                                </div>
+                                <div className="h-[250px] w-full pt-4">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart data={chartData}>
+                                            <CartesianGrid strokeDasharray="3 3" />
+                                            <XAxis dataKey="name" />
+                                            <YAxis tickFormatter={(value) => formatCurrency(value as number)} />
+                                            <Tooltip formatter={(value) => formatCurrency(value as number)} />
+                                            <Legend />
+                                            <Bar dataKey="Tax" fill="hsl(var(--primary))" />
+                                        </BarChart>
+                                    </ResponsiveContainer>
                                 </div>
                             </CardContent>
                         </Card>
