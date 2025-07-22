@@ -204,16 +204,20 @@ export function ClientCard({ client, onDelete }: ClientCardProps) {
   const handleSave = async () => {
     if (!user) return;
     try {
-        const { id, createdAt, ...dataToSave } = editableData;
-        const docRef = doc(db, `users/${user.uid}/clients`, id);
-        // Persist the user's regime choice
-        dataToSave.taxRegime = displayRegime; 
-        await updateDoc(docRef, dataToSave as ClientDataToSave);
-        toast({ title: "Success", description: "Client data updated successfully." });
-        setIsEditing(false);
+      // Create a plain object for Firestore by removing non-serializable fields
+      const { id, createdAt, ...dataToSave } = editableData;
+      
+      const plainData = JSON.parse(JSON.stringify(dataToSave));
+      plainData.taxRegime = displayRegime;
+
+      const docRef = doc(db, `users/${user.uid}/clients`, id);
+      await updateDoc(docRef, plainData);
+
+      toast({ title: "Success", description: "Client data updated successfully." });
+      setIsEditing(false);
     } catch (error) {
-        console.error("Error saving client data:", error);
-        toast({ variant: "destructive", title: "Save Failed", description: "Could not update client data." });
+      console.error("Error saving client data:", error);
+      toast({ variant: "destructive", title: "Save Failed", description: "Could not update client data." });
     }
   };
 
@@ -424,3 +428,5 @@ export function ClientCard({ client, onDelete }: ClientCardProps) {
     </Card>
   );
 }
+
+    
