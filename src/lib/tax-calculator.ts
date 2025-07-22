@@ -15,29 +15,31 @@ export function computeTax(
   let rebate = 0;
   const slabBreakdown: TaxSlab[] = [];
   
-  let ruleKey;
-  if (regime === "New") {
-    ruleKey = `${ay}-new`;
-  } else {
-    ruleKey = ay;
-  }
-  
-  let rule = taxRules[ruleKey as keyof typeof taxRules];
+  // Get the rules for the specific assessment year
+  const yearRules = taxRules[ay as keyof typeof taxRules];
 
-  // Fallback if specific year/regime combo not found
-  if (!rule) {
-    console.warn(`Tax rules for AY ${ay} and regime ${regime} not found. Falling back to 2024-25 New Regime.`);
-    rule = taxRules["2024-25-new"];
+  // Fallback if specific year not found
+  if (!yearRules) {
+    console.warn(`Tax rules for AY ${ay} not found. Falling back to 2024-25.`);
+    return computeTax(taxableIncome, age, regime, "2024-25");
   }
   
+  // Select the rule based on the regime ('old' or 'new')
+  const rule = regime === 'Old' ? yearRules.old : yearRules.new;
+
+  if (!rule) {
+    console.warn(`Tax rules for AY ${ay} and regime ${regime} not found. Falling back.`);
+    // Fallback to a default, e.g., 2024-25 New Regime's logic from a valid AY
+    return computeTax(taxableIncome, age, 'New', "2024-25");
+  }
+
   let slabsToUse = rule.slabs;
   if (regime === 'Old') {
+    // Check for senior-specific slabs only in the Old regime
     if (age >= 80 && rule.superSeniorSlabs) {
         slabsToUse = rule.superSeniorSlabs;
     } else if (age >= 60 && rule.seniorSlabs) {
         slabsToUse = rule.seniorSlabs;
-    } else {
-        slabsToUse = rule.slabs;
     }
   }
 
