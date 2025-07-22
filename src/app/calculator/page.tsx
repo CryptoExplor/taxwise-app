@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -12,7 +12,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { computeTax } from '@/lib/tax-calculator';
 import { formatCurrency } from '@/lib/utils';
-import { ArrowLeft, Calculator as CalculatorIcon, ReceiptText, Landmark } from 'lucide-react';
+import { ArrowLeft, Calculator as CalculatorIcon, ReceiptText, Landmark, Scale } from 'lucide-react';
 import Link from 'next/link';
 import { Separator } from '@/components/ui/separator';
 
@@ -41,8 +41,14 @@ interface TaxResult {
     regime: 'Old' | 'New';
 }
 
+interface ComparisonResult {
+    oldRegimeTax: number;
+    newRegimeTax: number;
+}
+
 export default function TaxCalculatorPage() {
     const [taxResult, setTaxResult] = useState<TaxResult | null>(null);
+    const [comparisonResult, setComparisonResult] = useState<ComparisonResult | null>(null);
 
     const { control, handleSubmit, watch, formState: { errors } } = useForm<CalculatorFormValues>({
         resolver: zodResolver(calculatorSchema),
@@ -57,9 +63,10 @@ export default function TaxCalculatorPage() {
     const taxRegime = watch('taxRegime');
 
     const onSubmit = (data: CalculatorFormValues) => {
+        // Main calculation for selected regime
         const taxableIncome = data.taxRegime === 'Old' 
             ? Math.max(0, data.grossTotalIncome - data.totalDeductions) 
-            : data.grossTotalIncome; // Deductions not allowed in New regime for this simple calc
+            : data.grossTotalIncome;
 
         const result = computeTax(taxableIncome, data.age, data.taxRegime, '2024-25');
         
@@ -69,6 +76,18 @@ export default function TaxCalculatorPage() {
             cess: result.cess,
             totalPayable: result.totalTaxLiability,
             regime: data.taxRegime,
+        });
+
+        // Comparison calculation
+        const oldRegimeTaxableIncome = Math.max(0, data.grossTotalIncome - data.totalDeductions);
+        const oldRegimeResult = computeTax(oldRegimeTaxableIncome, data.age, 'Old', '2024-25');
+        
+        const newRegimeTaxableIncome = data.grossTotalIncome;
+        const newRegimeResult = computeTax(newRegimeTaxableIncome, data.age, 'New', '2024-25');
+
+        setComparisonResult({
+            oldRegimeTax: oldRegimeResult.totalTaxLiability,
+            newRegimeTax: newRegimeResult.totalTaxLiability,
         });
     };
     
@@ -161,7 +180,7 @@ export default function TaxCalculatorPage() {
                     </form>
                 </Card>
 
-                <div className="mt-8 md:mt-0">
+                <div className="space-y-8">
                     {taxResult ? (
                         <Card className="bg-muted/30">
                             <CardHeader>
@@ -207,6 +226,36 @@ export default function TaxCalculatorPage() {
                                 <p className="text-xs text-muted-foreground mt-4">Disclaimer: This is an estimate for AY 2024-25 and does not include surcharge or other complexities. Consult a tax professional for exact figures.</p>
                              </div>
                         </div>
+                    )}
+
+                    {comparisonResult && (
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="font-headline text-2xl flex items-center gap-2">
+                                    <Scale className="w-6 h-6 text-primary" /> Regime Comparison
+                                </CardTitle>
+                                <CardDescription>See which regime saves you more tax.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="flex justify-around text-center">
+                                    <div>
+                                        <p className="text-muted-foreground font-semibold">Old Regime</p>
+                                        <p className="text-lg font-bold">{formatCurrency(comparisonResult.oldRegimeTax)}</p>
+                                    </div>
+                                     <div>
+                                        <p className="text-muted-foreground font-semibold">New Regime</p>
+                                        <p className="text-lg font-bold">{formatCurrency(comparisonResult.newRegimeTax)}</p>
+                                    </div>
+                                </div>
+                                <div className="p-3 rounded-md text-center font-semibold bg-accent/10 text-accent-foreground">
+                                    {comparisonResult.oldRegimeTax < comparisonResult.newRegimeTax
+                                        ? `The Old Regime seems more beneficial, saving you ${formatCurrency(comparisonResult.newRegimeTax - comparisonResult.oldRegimeTax)}.`
+                                        : comparisonResult.newRegimeTax < comparisonResult.oldRegimeTax
+                                        ? `The New Regime seems more beneficial, saving you ${formatCurrency(comparisonResult.oldRegimeTax - comparisonResult.newRegimeTax)}.`
+                                        : `Both regimes result in the same tax liability.`}
+                                </div>
+                            </CardContent>
+                        </Card>
                     )}
                 </div>
             </div>
