@@ -1,9 +1,9 @@
 
 "use client";
 
-import { useState, useRef, useTransition, useEffect } from "react";
+import { useState, useRef, useTransition, useEffect, useMemo } from "react";
 import { collection, addDoc, onSnapshot, query, orderBy, updateDoc, doc } from "firebase/firestore";
-import { UploadCloud, Loader, Download, Sparkles, BarChart, FileText, PlusCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { UploadCloud, Loader, Download, Sparkles, BarChart, FileText, PlusCircle, Search } from "lucide-react";
 import type { ClientData } from "@/lib/types";
 import { parseITR } from "@/lib/itr-parser";
 import { ClientCard } from "./client-card";
@@ -16,10 +16,7 @@ import { db } from "@/lib/firebase";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "./ui/card";
 import { computeTax } from "@/lib/tax-calculator";
 import { v4 as uuidv4 } from 'uuid';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
 import { Input } from "./ui/input";
-import { Label } from "./ui/label";
-import { formatCurrency } from "@/lib/utils";
 
 export function Dashboard() {
   const { user, userProfile } = useAuth();
@@ -29,6 +26,7 @@ export function Dashboard() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     if (!user) {
@@ -45,7 +43,7 @@ export function Dashboard() {
         id: doc.id,
         ...doc.data()
       })) as ClientData[];
-      setClients(clientsData.filter(c => c.id)); // Filter out any temporary clients
+      setClients(clientsData.filter(c => c.id));
       setIsInitialLoading(false);
     }, (error) => {
       console.error("Error fetching clients:", error);
@@ -59,6 +57,14 @@ export function Dashboard() {
 
     return () => unsubscribe();
   }, [user, toast]);
+  
+  const filteredClients = useMemo(() => {
+    if (!searchQuery) return clients;
+    return clients.filter(client => 
+        client.personalInfo.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        client.personalInfo.pan.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [clients, searchQuery]);
 
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -89,10 +95,8 @@ export function Dashboard() {
         
         const parsedData = await parseITR(file);
         
-        // Save to firestore
         const docRef = await addDoc(clientsCollectionRef, parsedData);
 
-        // Run AI analysis after saving, we don't need to block UI for this
         startTransition(() => {
             const { taxComputation, aiSummary, aiTips, ...aiInput } = parsedData;
             getTaxAnalysis(aiInput).then(async (aiResponse: TaxAnalysisOutput) => {
@@ -134,13 +138,13 @@ export function Dashboard() {
       const emptyTaxComputation = computeTax(0, 30, 'New', '2024-25', {
           salary: 0, houseProperty: 0, businessIncome: 0,
           capitalGains: { shortTerm: 0, longTerm: 0, stcg: { purchase: 0, sale: 0, expenses: 0 }, ltcg: { purchase: 0, sale: 0, expenses: 0 } },
-          otherSources: 0, grossTotalIncome: 0
+          otherSources: 0, grossTotalIncome: 0 
       }, 0);
       
       const newClient: ClientData = {
-          id: `temp-${uuidv4()}`, // Temporary ID
+          id: `temp-${uuidv4()}`,
           fileName: "Manual Entry",
-          createdAt: new Date() as any, // Will be replaced by server timestamp on save
+          createdAt: new Date() as any,
           personalInfo: {
               name: "New Manual Client",
               pan: "ABCDE1234F",
@@ -220,7 +224,19 @@ export function Dashboard() {
               <p className="text-muted-foreground">You have {clients.filter(c=>!c.id.startsWith('temp')).length} client{clients.length !== 1 ? 's' : ''} saved.</p>
             </div>
           </div>
-          {clients.length > 0 && (
+          <div className="flex items-center gap-4">
+            {clients.length > 0 && (
+                <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                    <Input 
+                        type="text"
+                        placeholder="Search by Name or PAN..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="pl-10 w-64"
+                    />
+                </div>
+            )}
             <div className="flex gap-2">
               <Button onClick={handleNewManualComputation} disabled={isProcessing}>
                   <PlusCircle className="mr-2 h-4 w-4" />
@@ -231,7 +247,7 @@ export function Dashboard() {
                   Export All as CSV
               </Button>
             </div>
-          )}
+          </div>
         </div>
 
       <input id="file-upload-main" type="file" className="hidden" ref={fileInputRef} onChange={handleFileChange} accept="application/json" multiple disabled={isProcessing} />
@@ -242,9 +258,9 @@ export function Dashboard() {
         loadingState("Processing your returns...", "Please wait while we compute your tax summary.")
       )}
 
-      {clients.length > 0 && (
+      {filteredClients.length > 0 ? (
         <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
-          {clients.map((client) => (
+          {filteredClients.map((client) => (
             <ClientCard key={client.id} client={client} onDelete={handleClientDelete} onSave={handleClientSave} />
           ))}
           
@@ -278,6 +294,17 @@ export function Dashboard() {
             </div>
           )}
         </div>
+      ) : (
+        clients.length > 0 && (
+            <div className="text-center flex flex-col items-center justify-center min-h-[40vh] bg-background rounded-lg border-2 border-dashed border-border p-8">
+                <Search className="w-16 h-16 mb-4 text-muted-foreground" />
+                <h2 className="text-2xl font-headline font-bold mt-4 mb-2">No Clients Found</h2>
+                <p className="text-muted-foreground max-w-md mb-6">
+                  Your search for "{searchQuery}" did not match any clients.
+                </p>
+                <Button variant="outline" onClick={() => setSearchQuery('')}>Clear Search</Button>
+            </div>
+        )
       )}
     </div>
   );

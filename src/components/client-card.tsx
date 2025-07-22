@@ -255,12 +255,13 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
     if (!user) return;
     setIsSaving(true);
     
+    // Create a plain object for saving, excluding complex types or fields managed by the server
     const { id, createdAt, ...dataToSave } = editableData;
     const plainData = JSON.parse(JSON.stringify(dataToSave));
 
     try {
       if (isNewClient) {
-        // Add new document
+        // Add new document with server timestamp
         const clientsCollectionRef = collection(db, `users/${user.uid}/clients`);
         const docRef = await addDoc(clientsCollectionRef, { ...plainData, createdAt: serverTimestamp() });
         toast({ title: "Success", description: "Client data saved successfully." });
@@ -472,40 +473,31 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
           </div>
           
            
-        <Collapsible className="px-4 pt-4 mt-4 border-t">
-            <CollapsibleTrigger asChild>
-                <div className="flex items-center justify-between cursor-pointer group">
-                    <h4 className="text-lg font-semibold flex items-center gap-2">
-                        Capital Gains Manual Entry
-                    </h4>
-                    <Button variant="ghost" size="sm" className="group-data-[state=open]:rotate-180 transition-transform">
-                        <ChevronDown className="w-5 h-5" />
-                    </Button>
+        <div className="px-4 pt-4 mt-4 border-t">
+            <h4 className="text-lg font-semibold mb-2">
+                Capital Gains Manual Entry
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 py-4">
+                <div className="space-y-3 p-4 border rounded-lg">
+                        <h4 className="font-semibold text-center">Short Term Capital Gain</h4>
+                        <CapitalGainInputRow label="Purchase" name="purchase" value={stcg.purchase} onChange={(e) => handleCapitalGainChange(e, 'stcg')} isReadOnly={!isEditing}/>
+                        <CapitalGainInputRow label="Sale" name="sale" value={stcg.sale} onChange={(e) => handleCapitalGainChange(e, 'stcg')} isReadOnly={!isEditing}/>
+                        <CapitalGainInputRow label="Expenses" name="expenses" value={stcg.expenses} onChange={(e) => handleCapitalGainChange(e, 'stcg')} isReadOnly={!isEditing}/>
+                        <Separator />
+                        <CapitalGainInputRow label="Profit/Loss" name="profit" value={stcgProfit} onChange={()=>{}} isReadOnly={true} />
+                        <CapitalGainInputRow label="Total Gain" name="total" value={stcgTotalGain} onChange={()=>{}} isReadOnly={true} isBold={true} />
                 </div>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 py-4">
-                    <div className="space-y-3 p-4 border rounded-lg">
-                            <h4 className="font-semibold text-center">Short Term Capital Gain</h4>
-                            <CapitalGainInputRow label="Purchase" name="purchase" value={stcg.purchase} onChange={(e) => handleCapitalGainChange(e, 'stcg')} isReadOnly={!isEditing}/>
-                            <CapitalGainInputRow label="Sale" name="sale" value={stcg.sale} onChange={(e) => handleCapitalGainChange(e, 'stcg')} isReadOnly={!isEditing}/>
-                            <CapitalGainInputRow label="Expenses" name="expenses" value={stcg.expenses} onChange={(e) => handleCapitalGainChange(e, 'stcg')} isReadOnly={!isEditing}/>
-                            <Separator />
-                            <CapitalGainInputRow label="Profit/Loss" name="profit" value={stcgProfit} onChange={()=>{}} isReadOnly={true} />
-                            <CapitalGainInputRow label="Total Gain" name="total" value={stcgTotalGain} onChange={()=>{}} isReadOnly={true} isBold={true} />
-                    </div>
-                    <div className="space-y-3 p-4 border rounded-lg">
-                            <h4 className="font-semibold text-center">Long Term Capital Gain</h4>
-                            <CapitalGainInputRow label="Purchase" name="purchase" value={ltcg.purchase} onChange={(e) => handleCapitalGainChange(e, 'ltcg')} isReadOnly={!isEditing}/>
-                            <CapitalGainInputRow label="Sale" name="sale" value={ltcg.sale} onChange={(e) => handleCapitalGainChange(e, 'ltcg')} isReadOnly={!isEditing}/>
-                            <CapitalGainInputRow label="Expenses" name="expenses" value={ltcg.expenses} onChange={(e) => handleCapitalGainChange(e, 'ltcg')} isReadOnly={!isEditing}/>
-                            <Separator />
-                            <CapitalGainInputRow label="Profit/Loss" name="profit" value={ltcgProfit} onChange={()=>{}} isReadOnly={true} />
-                            <CapitalGainInputRow label="Total Gain" name="total" value={ltcgTotalGain} onChange={()=>{}} isReadOnly={true} isBold={true} />
-                    </div>
+                <div className="space-y-3 p-4 border rounded-lg">
+                        <h4 className="font-semibold text-center">Long Term Capital Gain</h4>
+                        <CapitalGainInputRow label="Purchase" name="purchase" value={ltcg.purchase} onChange={(e) => handleCapitalGainChange(e, 'ltcg')} isReadOnly={!isEditing}/>
+                        <CapitalGainInputRow label="Sale" name="sale" value={ltcg.sale} onChange={(e) => handleCapitalGainChange(e, 'ltcg')} isReadOnly={!isEditing}/>
+                        <CapitalGainInputRow label="Expenses" name="expenses" value={ltcg.expenses} onChange={(e) => handleCapitalGainChange(e, 'ltcg')} isReadOnly={!isEditing}/>
+                        <Separator />
+                        <CapitalGainInputRow label="Profit/Loss" name="profit" value={ltcgProfit} onChange={()=>{}} isReadOnly={true} />
+                        <CapitalGainInputRow label="Total Gain" name="total" value={ltcgTotalGain} onChange={()=>{}} isReadOnly={true} isBold={true} />
                 </div>
-            </CollapsibleContent>
-        </Collapsible>
+            </div>
+        </div>
         
 
       </CardContent>
@@ -557,5 +549,3 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
     </Card>
   );
 }
-
-    
