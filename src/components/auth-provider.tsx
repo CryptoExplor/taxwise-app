@@ -1,7 +1,7 @@
 
 "use client";
 
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
 import { Loader } from 'lucide-react';
@@ -38,25 +38,39 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
-
+  
+  // Effect for handling authentication state changes
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
-      if (currentUser) {
-        const userDocRef = doc(db, 'users', currentUser.uid);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Effect for fetching user profile data when user is authenticated
+  const fetchUserProfile = useCallback(async () => {
+    if (user) {
+      const userDocRef = doc(db, 'users', user.uid);
+      try {
         const userDoc = await getDoc(userDocRef);
         if (userDoc.exists()) {
           setUserProfile(userDoc.data() as UserProfile);
         }
-      } else {
-        setUserProfile(null);
+      } catch (error) {
+        console.error("Failed to fetch user profile:", error);
+        setUserProfile(null); // Clear profile on error
       }
-      setLoading(false);
-    });
+    } else {
+      setUserProfile(null); // Clear profile if no user
+    }
+  }, [user]);
 
-    return () => unsubscribe();
-  }, []);
-  
+  useEffect(() => {
+    fetchUserProfile();
+  }, [fetchUserProfile]);
+
+  // Effect for handling route protection
   useEffect(() => {
     if (loading) return; // Don't do anything until the auth state is resolved
 
