@@ -15,57 +15,90 @@ import { Button } from "./ui/button";
 import { Separator } from "./ui/separator";
 import {
   User,
-  ReceiptText,
-  Landmark,
   FileDown,
-  ArrowRight,
-  ArrowDown,
-  Sparkles,
-  Lightbulb,
   RefreshCw,
   Loader,
-  Scale,
   Edit,
   Save,
   XCircle,
 } from "lucide-react";
 import { generatePDF } from "@/lib/pdf-exporter";
-import { useState, useTransition, useEffect } from "react";
-import { Badge } from "./ui/badge";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+import { useState, useTransition, useEffect, useMemo } from "react";
 import { useAuth } from "./auth-provider";
 import { useToast } from "@/hooks/use-toast";
 import { getTaxAnalysis } from "@/ai/flows/tax-analysis-flow";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Input } from "./ui/input";
-import { Label } from "./ui/label";
 import { computeTax } from "@/lib/tax-calculator";
 import type { ClientDataToSave } from "@/lib/types";
-
+import { Badge } from "./ui/badge";
 
 interface ClientCardProps {
   client: ClientData;
 }
 
+const ComputationRow = ({
+  label,
+  value,
+  isBold = false,
+  isTotal = false,
+  isEditable = false,
+  onChange,
+  isSubItem = false,
+  isFinal = false,
+  textColor,
+}: {
+  label: string;
+  value: number | string;
+  isBold?: boolean;
+  isTotal?: boolean;
+  isEditable?: boolean;
+  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  isSubItem?: boolean;
+  isFinal?: boolean;
+  textColor?: string;
+}) => {
+  const valueFormatted = typeof value === "number" ? formatCurrency(value) : value;
+  const labelStyle = isBold ? "font-bold" : "";
+  const rowStyle = isTotal
+    ? "bg-muted/60 border-t-2 border-b-2 border-black"
+    : "border-b";
+  const finalStyle = isFinal ? "text-lg font-bold" : "";
+
+  return (
+    <tr className={rowStyle}>
+      <td className={`p-2 ${isSubItem ? "pl-8" : "pl-4"} ${labelStyle}`}>
+        {label}
+      </td>
+      <td
+        className={`p-2 text-right pr-4 font-mono ${finalStyle} ${textColor}`}
+      >
+        {isEditable ? (
+          <Input
+            type="text"
+            value={value}
+            onChange={onChange}
+            className="h-8 text-right bg-background"
+            onFocus={(e) => e.target.select()}
+          />
+        ) : (
+          valueFormatted
+        )}
+      </td>
+    </tr>
+  );
+};
+
+
 export function ClientCard({ client }: ClientCardProps) {
   const { user, userProfile } = useAuth();
   const { toast } = useToast();
-  
-  const [editableData, setEditableData] = useState<ClientData>(client);
-  const [isEditing, setIsEditing] = useState(false);
-  
-  const [isExporting, setIsExporting] = useState(false);
-  const [isRefreshing, startTransition] = useTransition();
 
+  const [isEditing, setIsEditing] = useState(false);
+  const [editableData, setEditableData] = useState<ClientData>(client);
+  
   useEffect(() => {
-    // When the client prop changes (e.g., from parent re-render), update the editable state
-    // but only if we are not in editing mode.
     if (!isEditing) {
       setEditableData(client);
     }
@@ -73,280 +106,142 @@ export function ClientCard({ client }: ClientCardProps) {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, path: string) => {
     const { value } = e.target;
-    const [section, field, subField] = path.split('.');
+    // Remove formatting for calculation
+    const numericValue = parseFloat(value.replace(/,/g, '')) || 0;
     
     setEditableData(prev => {
-        const newData = { ...prev };
+        const newData = JSON.parse(JSON.stringify(prev)); // Deep copy
         let currentLevel: any = newData;
         const pathArray = path.split('.');
         pathArray.forEach((key, index) => {
             if (index === pathArray.length - 1) {
-                currentLevel[key] = Number(value) || 0;
+                currentLevel[key] = numericValue;
             } else {
                 currentLevel = currentLevel[key];
             }
         });
-        return recomputeTaxes(newData);
+        return recomputeAll(newData);
     });
   };
 
-  const recomputeTaxes = (data: ClientData): ClientData => {
-      const { personalInfo, incomeDetails, deductions } = data;
-      
-      const oldRegimeTaxableIncome = Math.max(0, incomeDetails.grossTotalIncome - deductions.totalDeductions);
-      const newRegimeTaxableIncome = incomeDetails.grossTotalIncome;
-      
-      const oldRegimeResult = computeTax(oldRegimeTaxableIncome, personalInfo.age, 'Old', personalInfo.assessmentYear);
-      const newRegimeResult = computeTax(newRegimeTaxableIncome, personalInfo.age, 'New', personalInfo.assessmentYear);
-      
-      const taxComputationResult = data.taxRegime === 'Old' ? oldRegimeResult : newRegimeResult;
-      const taxableIncome = data.taxRegime === 'Old' ? oldRegimeTaxableIncome : newRegimeTaxableIncome;
-      const finalAmount = taxComputationResult.totalTaxLiability - data.taxesPaid.totalTaxPaid;
+  const recomputeAll = (data: ClientData): ClientData => {
+    // Recalculate Gross Total Income
+    data.incomeDetails.grossTotalIncome = 
+        data.incomeDetails.salary +
+        data.incomeDetails.houseProperty +
+        data.incomeDetails.businessIncome +
+        data.incomeDetails.capitalGains.shortTerm +
+        data.incomeDetails.capitalGains.longTerm +
+        data.incomeDetails.otherSources;
+    
+    // Recalculate Total Deductions
+    data.deductions.totalDeductions = data.deductions.section80C + data.deductions.section80D; // Add other deductions here
 
-      return {
-          ...data,
-          taxComputation: {
-              ...taxComputationResult,
-              taxableIncome: taxableIncome,
-              netTaxPayable: Math.max(0, finalAmount),
-              refund: Math.max(0, -finalAmount),
-          },
-          taxComparison: {
-              oldRegime: oldRegimeResult,
-              newRegime: newRegimeResult,
-          },
-      };
+    // Recompute taxes for both regimes
+    const oldRegimeTaxableIncome = Math.max(0, data.incomeDetails.grossTotalIncome - data.deductions.totalDeductions);
+    const newRegimeTaxableIncome = data.incomeDetails.grossTotalIncome;
+    
+    const oldRegimeResult = computeTax(oldRegimeTaxableIncome, data.personalInfo.age, 'Old', data.personalInfo.assessmentYear);
+    const newRegimeResult = computeTax(newRegimeTaxableIncome, data.personalInfo.age, 'New', data.personalInfo.assessmentYear);
+
+    const taxComputationResult = data.taxRegime === 'Old' ? oldRegimeResult : newRegimeResult;
+    const taxableIncome = data.taxRegime === 'Old' ? oldRegimeTaxableIncome : newRegimeTaxableIncome;
+    
+    // Recalculate total tax paid
+    data.taxesPaid.totalTaxPaid = data.taxesPaid.tds; // Add TCS, self-assessment etc. here
+
+    const finalAmount = taxComputationResult.totalTaxLiability - data.taxesPaid.totalTaxPaid;
+    
+    return {
+      ...data,
+      taxComputation: { ...taxComputationResult, taxableIncome, netTaxPayable: Math.max(0, finalAmount), refund: Math.max(0, -finalAmount) },
+      taxComparison: { oldRegime: oldRegimeResult, newRegime: newRegimeResult },
+    };
   };
-  
+
   const handleSave = async () => {
     if (!user) return;
     try {
         const { id, createdAt, ...dataToSave } = editableData;
         const docRef = doc(db, `users/${user.uid}/clients`, id);
         await updateDoc(docRef, dataToSave as ClientDataToSave);
-        toast({
-            title: "Success",
-            description: "Client data updated successfully."
-        });
+        toast({ title: "Success", description: "Client data updated successfully." });
         setIsEditing(false);
     } catch (error) {
         console.error("Error saving client data:", error);
-        toast({
-            variant: "destructive",
-            title: "Save Failed",
-            description: "Could not update client data in the database."
-        });
+        toast({ variant: "destructive", title: "Save Failed", description: "Could not update client data." });
     }
   };
 
   const handleCancel = () => {
       setIsEditing(false);
-      setEditableData(client); // Revert to original data
+      setEditableData(client);
   };
-
 
   const handleExport = async () => {
-    setIsExporting(true);
     await generatePDF(editableData, "Generated by TaxWise");
-    setIsExporting(false);
   };
-
-  const handleRefreshAnalysis = () => {
-    if (!user) return;
-    startTransition(async () => {
-        try {
-            const { taxComputation, aiSummary, aiTips, ...aiInput } = editableData;
-            const aiResponse = await getTaxAnalysis(aiInput);
-            const updatedData = { ...editableData, aiSummary: aiResponse.summary, aiTips: aiResponse.tips };
-            setEditableData(updatedData);
-            await updateDoc(doc(db, `users/${user.uid}/clients`, client.id), {
-                aiSummary: aiResponse.summary,
-                aiTips: aiResponse.tips
-            });
-            toast({
-                title: "AI Analysis Refreshed",
-                description: "The summary and tips have been updated.",
-            });
-        } catch (err) {
-            console.error("AI analysis failed for client:", client.id, err);
-            toast({
-                variant: "destructive",
-                title: "AI Analysis Failed",
-                description: `Could not refresh AI insights for ${client.fileName}.`,
-            });
-        }
-    });
-  };
-
-  const SummaryItem = ({ label, value }: { label: string; value: string | number }) => (
-    <div className="flex justify-between items-center text-sm py-2">
-      <p className="text-muted-foreground">{label}</p>
-      <p className="font-medium">{typeof value === 'number' ? formatCurrency(value) : value}</p>
-    </div>
-  );
-
-  const EditableField = ({ label, path, value }: { label: string, path: string, value: number }) => (
-    <div className="space-y-1">
-      <Label htmlFor={`${path}-${client.id}`} className="text-xs text-muted-foreground">{label}</Label>
-      <Input
-        id={`${path}-${client.id}`}
-        type="number"
-        value={value}
-        onChange={(e) => handleInputChange(e, path)}
-        className="h-8 text-sm"
-        disabled={!isEditing}
-      />
-    </div>
-  );
-  
-  const canRefresh = userProfile && ['family', 'pro', 'agency', 'admin'].includes(userProfile.plan);
 
   return (
-    <Card className="flex flex-col hover:shadow-lg transition-shadow duration-300">
+    <Card className="flex flex-col hover:shadow-lg transition-shadow duration-300 w-full">
       <CardHeader>
         <div className="flex justify-between items-start">
             <div>
-                <div className="flex items-center gap-3">
-                    <User className="w-8 h-8 text-primary" />
-                    <div>
-                        <CardTitle className="font-headline text-2xl">
-                            {editableData.personalInfo.name}
-                        </CardTitle>
-                        <CardDescription>
-                            PAN: {editableData.personalInfo.pan} | AY: {editableData.personalInfo.assessmentYear}
-                        </CardDescription>
-                    </div>
-                </div>
+                <CardTitle className="font-headline text-2xl">
+                    Computation of Income
+                </CardTitle>
+                <CardDescription>
+                    Assessment Year: {editableData.personalInfo.assessmentYear}
+                </CardDescription>
             </div>
-             <div className="flex flex-col items-end gap-2">
-                <Badge variant={editableData.taxRegime === 'New' ? 'default' : 'secondary'}>{editableData.taxRegime} Regime</Badge>
-                <p className="text-xs text-muted-foreground pt-1 truncate max-w-[120px]">{editableData.fileName}</p>
-            </div>
+            <Badge variant={editableData.taxRegime === 'New' ? 'default' : 'secondary'}>{editableData.taxRegime} Regime</Badge>
         </div>
       </CardHeader>
-      <CardContent className="flex-grow">
-          <Accordion type="single" collapsible defaultValue="item-1">
-            <AccordionItem value="item-1">
-              <AccordionTrigger className="font-headline text-lg font-semibold">
-                <div className="flex items-center gap-2">
-                  <ReceiptText className="w-5 h-5 text-accent" /> Tax Computation
-                </div>
-              </AccordionTrigger>
-              <AccordionContent className="space-y-4 pt-2">
-                <div>
-                  <h3 className="font-headline text-md font-semibold flex items-center gap-2 mb-2 text-muted-foreground">
-                    <Landmark className="w-4 h-4" /> Income & Deductions
-                  </h3>
-                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                      <EditableField label="Salary" path="incomeDetails.salary" value={editableData.incomeDetails.salary} />
-                      <EditableField label="House Property" path="incomeDetails.houseProperty" value={editableData.incomeDetails.houseProperty} />
-                      <EditableField label="Business Income" path="incomeDetails.businessIncome" value={editableData.incomeDetails.businessIncome} />
-                      <EditableField label="Capital Gains" path="incomeDetails.capitalGains.shortTerm" value={editableData.incomeDetails.capitalGains.shortTerm} />
-                      <EditableField label="Other Sources" path="incomeDetails.otherSources" value={editableData.incomeDetails.otherSources} />
-                      <EditableField label="Gross Total Income" path="incomeDetails.grossTotalIncome" value={editableData.incomeDetails.grossTotalIncome} />
-                      <EditableField label="80C Deductions" path="deductions.section80C" value={editableData.deductions.section80C} />
-                      <EditableField label="80D Deductions" path="deductions.section80D" value={editableData.deductions.section80D} />
-                      <EditableField label="Total Deductions" path="deductions.totalDeductions" value={editableData.deductions.totalDeductions} />
-                   </div>
-                </div>
-                 <div>
-                   <h3 className="font-headline text-md font-semibold flex items-center gap-2 mb-2 mt-4 text-muted-foreground">
-                    <ReceiptText className="w-4 h-4" /> Tax Summary
-                  </h3>
-                  <Separator />
-                  <SummaryItem label="Net Taxable Income" value={editableData.taxComputation.taxableIncome} />
-                  <Separator />
-                  <SummaryItem label="Tax before Cess" value={editableData.taxComputation.taxBeforeCess} />
-                  <Separator />
-                  <SummaryItem label="Rebate u/s 87A" value={editableData.taxComputation.rebate} />
-                   <Separator />
-                  <SummaryItem label="Taxes Paid (TDS, etc.)" value={editableData.taxesPaid.totalTaxPaid} />
-                </div>
-              </AccordionContent>
-            </AccordionItem>
-            <AccordionItem value="item-2">
-              <AccordionTrigger className="font-headline text-lg font-semibold">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-accent" /> AI Analysis & Comparison
-                </div>
-              </AccordionTrigger>
-              <AccordionContent>
-                 <div className="space-y-4 pt-2">
-                    {editableData.aiSummary ? (
-                         <p className="text-sm text-foreground/90 italic border-l-2 border-accent pl-3">{editableData.aiSummary}</p>
-                    ): (
-                         <p className="text-sm text-muted-foreground">AI summary is being generated...</p>
-                    )}
-                   
-                    {editableData.aiTips && editableData.aiTips.length > 0 && (
-                        <div className="space-y-2">
-                            <h4 className="font-semibold flex items-center gap-2"><Lightbulb className="w-4 h-4 text-amber-500" /> Tax Saving Tips:</h4>
-                            <ul className="list-disc pl-5 space-y-1 text-sm">
-                                {editableData.aiTips.map((tip, index) => <li key={index}>{tip}</li>)}
-                            </ul>
-                        </div>
-                    )}
-                     {canRefresh && (
-                        <div className="pt-2 text-right">
-                            <Button variant="ghost" size="sm" onClick={handleRefreshAnalysis} disabled={isRefreshing}>
-                                {isRefreshing ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                                {isRefreshing ? "Refreshing..." : "Refresh AI Analysis"}
-                            </Button>
-                        </div>
-                    )}
+      <CardContent className="flex-grow p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+                <tbody>
+                    <ComputationRow label="Name" value={editableData.personalInfo.name} isBold={true} />
+                    <ComputationRow label="PAN" value={editableData.personalInfo.pan} isBold={true} />
+                    
+                    {/* --- Income Section --- */}
+                    <tr className="bg-muted/30"><td colSpan={2} className="p-2 pl-4 font-bold">Income Particulars</td></tr>
+                    <ComputationRow label="Income from Salary" value={editableData.incomeDetails.salary} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'incomeDetails.salary')} />
+                    <ComputationRow label="Interest Income (from Bank, etc.)" value={editableData.incomeDetails.otherSources} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'incomeDetails.otherSources')} isSubItem={true} />
+                    <ComputationRow label="Gross Total Income" value={editableData.incomeDetails.grossTotalIncome} isTotal={true}/>
 
-                    {editableData.taxComparison && (
-                        <div className="space-y-3 pt-4">
-                            <Separator />
-                            <h4 className="font-semibold flex items-center gap-2"><Scale className="w-4 h-4 text-blue-500" /> Regime Comparison:</h4>
-                            <div className="flex justify-around text-center p-2 rounded-lg bg-muted">
-                                <div>
-                                    <p className="text-muted-foreground text-sm font-semibold">Old Regime</p>
-                                    <p className="text-md font-bold">{formatCurrency(editableData.taxComparison.oldRegime.totalTaxLiability)}</p>
-                                </div>
-                                <div>
-                                    <p className="text-muted-foreground text-sm font-semibold">New Regime</p>
-                                    <p className="text-md font-bold">{formatCurrency(editableData.taxComparison.newRegime.totalTaxLiability)}</p>
-                                </div>
-                            </div>
-                             <div className="p-2 rounded-md text-center font-semibold text-sm bg-accent/10 text-accent-foreground">
-                                {editableData.taxComparison.oldRegime.totalTaxLiability < editableData.taxComparison.newRegime.totalTaxLiability
-                                    ? `The Old Regime seems more beneficial, saving you ${formatCurrency(editableData.taxComparison.newRegime.totalTaxLiability - editableData.taxComparison.oldRegime.totalTaxLiability)}.`
-                                    : editableData.taxComparison.newRegime.totalTaxLiability < editableData.taxComparison.oldRegime.totalTaxLiability
-                                    ? `The New Regime seems more beneficial, saving you ${formatCurrency(editableData.taxComparison.oldRegime.totalTaxLiability - editableData.taxComparison.newRegime.totalTaxLiability)}.`
-                                    : `Both regimes result in the same tax liability.`}
-                            </div>
-                        </div>
-                    )}
-                 </div>
-              </AccordionContent>
-            </AccordionItem>
-        </Accordion>
+                    {/* --- Deductions Section --- */}
+                    <ComputationRow label="Less: Standard Deduction u/s 16(ia)" value={-50000} />
+                    <ComputationRow label="Less: Deductions u/s 80C" value={editableData.deductions.section80C} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80C')} />
+                    <ComputationRow label="Less: Deductions u/s 80D (Health)" value={editableData.deductions.section80D} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80D')} />
+                    <ComputationRow label="NET TAXABLE AMOUNT" value={editableData.taxComputation.taxableIncome} isTotal={true}/>
+
+                    {/* --- Tax Calculation Section --- */}
+                    <tr className="bg-muted/30"><td colSpan={2} className="p-2 pl-4 font-bold">Tax on Total Income</td></tr>
+                    {editableData.taxComputation.slabBreakdown?.map((slab, i) => (
+                        <ComputationRow key={i} label={`On ${formatCurrency(slab.amount)} @ ${slab.rate}%`} value={slab.tax} isSubItem={true} />
+                    ))}
+                    <ComputationRow label="Total Tax" value={editableData.taxComputation.taxBeforeCess} isBold={true} />
+                    <ComputationRow label="Less: Rebate u/s 87A" value={-editableData.taxComputation.rebate} />
+                    <ComputationRow label="Add: Education Cess (4%)" value={editableData.taxComputation.cess} />
+                    <ComputationRow label="TOTAL TAX PAYABLE" value={editableData.taxComputation.totalTaxLiability} isTotal={true}/>
+
+                    {/* --- TDS Section --- */}
+                    <ComputationRow label="Less: T.D.S." value={-editableData.taxesPaid.tds} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'taxesPaid.tds')} />
+
+                    {/* --- Final Amount --- */}
+                     <ComputationRow 
+                        label={editableData.taxComputation.netTaxPayable > 0 ? "Amount to be PAYABLE" : "Refundable"} 
+                        value={editableData.taxComputation.netTaxPayable > 0 ? editableData.taxComputation.netTaxPayable : editableData.taxComputation.refund} 
+                        isTotal={true}
+                        isFinal={true}
+                        textColor={editableData.taxComputation.netTaxPayable > 0 ? "text-destructive" : "text-green-600"}
+                    />
+                </tbody>
+            </table>
+          </div>
       </CardContent>
-      <CardFooter className="flex-col items-stretch gap-4 p-4 bg-muted/50 dark:bg-card-foreground/5 rounded-b-lg mt-4">
-        
-        <div className="flex justify-between items-center p-3 rounded-lg bg-background">
-          {editableData.taxComputation.netTaxPayable > 0 ? (
-            <>
-              <h4 className="font-bold text-lg text-destructive flex items-center gap-2">
-                <ArrowRight className="w-5 h-5" /> Tax Payable
-              </h4>
-              <p className="font-bold text-xl text-destructive">
-                {formatCurrency(editableData.taxComputation.netTaxPayable)}
-              </p>
-            </>
-          ) : (
-            <>
-              <h4 className="font-bold text-lg text-green-600 flex items-center gap-2">
-                <ArrowDown className="w-5 h-5" /> Refund Due
-              </h4>
-              <p className="font-bold text-xl text-green-600">
-                {formatCurrency(editableData.taxComputation.refund)}
-              </p>
-            </>
-          )}
-        </div>
-        
+      <CardFooter className="flex-col items-stretch gap-4 p-4 bg-muted/50 rounded-b-lg mt-4">
         <div className="flex gap-2 justify-end">
             {isEditing ? (
                 <>
@@ -356,12 +251,11 @@ export function ClientCard({ client }: ClientCardProps) {
             ) : (
                 <Button variant="outline" onClick={() => setIsEditing(true)}><Edit /> Edit Data</Button>
             )}
-            <Button onClick={handleExport} disabled={isExporting}>
+            <Button onClick={handleExport} disabled={isEditing}>
               <FileDown className="mr-2 h-4 w-4" />
-              {isExporting ? "Exporting..." : "Export PDF"}
+              Export PDF
             </Button>
         </div>
-
       </CardFooter>
     </Card>
   );
