@@ -20,8 +20,15 @@ export interface IncomeDetails {
 export interface Deductions {
   section80C: number;
   section80D: number;
+  interestOnBorrowedCapital?: number; // Home Loan Interest
+  section80CCD1B?: number;
+  section80CCD2?: number;
+  section80G?: number;
+  section80TTA?: number;
+  section80TTB?: number;
   totalDeductions: number;
 }
+
 
 export interface TaxesPaid {
   tds: number;

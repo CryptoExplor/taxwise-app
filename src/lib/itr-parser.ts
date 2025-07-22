@@ -104,6 +104,12 @@ export async function parseITR(file: File): Promise<ClientDataToSave> {
     const deductions = {
       section80C: get(jsonData, 'DeductUndChapVIA.Section80C', 0),
       section80D: get(jsonData, 'DeductUndChapVIA.Section80D', 0),
+      interestOnBorrowedCapital: getFromPaths(jsonData, ['ScheduleHP.InterestPayable']),
+      section80CCD1B: getFromPaths(jsonData, ['DeductUndChapVIA.Section80CCD_1B']),
+      section80CCD2: getFromPaths(jsonData, ['DeductUndChapVIA.Section80CCD_2']),
+      section80G: getFromPaths(jsonData, ['DeductUndChapVIA.Section80G']),
+      section80TTA: getFromPaths(jsonData, ['DeductUndChapVIA.Section80TTA']),
+      section80TTB: getFromPaths(jsonData, ['DeductUndChapVIA.Section80TTB']),
       totalDeductions: get(jsonData, 'PartB_TI.TotalDeductions', 0),
     };
 
@@ -116,8 +122,9 @@ export async function parseITR(file: File): Promise<ClientDataToSave> {
     // --- START of new calculation logic ---
 
     // Calculate for both regimes
-    const oldRegimeTaxableIncome = Math.max(0, incomeDetails.grossTotalIncome - deductions.totalDeductions);
-    const newRegimeTaxableIncome = incomeDetails.grossTotalIncome; // Deductions not considered for New Regime
+    const standardDeduction = incomeDetails.salary > 0 ? 50000 : 0;
+    const oldRegimeTaxableIncome = Math.max(0, incomeDetails.grossTotalIncome - deductions.totalDeductions - standardDeduction);
+    const newRegimeTaxableIncome = Math.max(0, incomeDetails.grossTotalIncome - standardDeduction); // New regime gets standard deduction
 
     const oldRegimeResult = computeTax(oldRegimeTaxableIncome, personalInfo.age, 'Old', personalInfo.assessmentYear);
     const newRegimeResult = computeTax(newRegimeTaxableIncome, personalInfo.age, 'New', personalInfo.assessmentYear);

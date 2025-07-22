@@ -168,7 +168,15 @@ export function ClientCard({ client, onDelete }: ClientCardProps) {
     const standardDeduction = data.incomeDetails.salary > 0 ? Math.min(data.incomeDetails.salary, 50000) : 0;
     
     // Recalculate Total Deductions
-    data.deductions.totalDeductions = data.deductions.section80C + data.deductions.section80D; // Add other deductions here
+    data.deductions.totalDeductions = 
+        (data.deductions.section80C || 0) + 
+        (data.deductions.section80D || 0) +
+        (data.deductions.interestOnBorrowedCapital || 0) +
+        (data.deductions.section80CCD1B || 0) +
+        (data.deductions.section80CCD2 || 0) +
+        (data.deductions.section80G || 0) +
+        (data.deductions.section80TTA || 0) +
+        (data.deductions.section80TTB || 0);
 
     // Recompute taxes for both regimes for comparison
     const oldRegimeTaxableIncome = Math.max(0, data.incomeDetails.grossTotalIncome - data.deductions.totalDeductions - standardDeduction);
@@ -334,8 +342,15 @@ export function ClientCard({ client, onDelete }: ClientCardProps) {
 
                         {/* --- Deductions Section --- */}
                         <ComputationRow label="Less: Standard Deduction u/s 16(ia)" value={-standardDeduction} />
-                        <ComputationRow label="Less: Deductions u/s 80C" value={-editableData.deductions.section80C} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80C')} />
-                        <ComputationRow label="Less: Deductions u/s 80D (Health)" value={-editableData.deductions.section80D} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80D')} />
+                        <ComputationRow label="Less: Interest on Home Loan" value={-(editableData.deductions.interestOnBorrowedCapital || 0)} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.interestOnBorrowedCapital')} />
+                        <ComputationRow label="Less: Deductions u/s 80C" value={-(editableData.deductions.section80C || 0)} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80C')} />
+                        <ComputationRow label="Less: Deductions u/s 80D (Health)" value={-(editableData.deductions.section80D || 0)} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80D')} />
+                        <ComputationRow label="Less: 80CCD(1B)" value={-(editableData.deductions.section80CCD1B || 0)} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80CCD1B')} />
+                        <ComputationRow label="Less: 80CCD(2)" value={-(editableData.deductions.section80CCD2 || 0)} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80CCD2')} />
+                        <ComputationRow label="Less: 80G (Donations)" value={-(editableData.deductions.section80G || 0)} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80G')} />
+                        <ComputationRow label="Less: 80TTA (Savings Interest)" value={-(editableData.deductions.section80TTA || 0)} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80TTA')} />
+                        <ComputationRow label="Less: 80TTB (Senior Citizen)" value={-(editableData.deductions.section80TTB || 0)} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80TTB')} />
+
                         <ComputationRow label="NET TAXABLE AMOUNT" value={taxableIncomeToShow} isTotal={true}/>
 
                         {/* --- Tax Calculation Section --- */}
@@ -409,5 +424,3 @@ export function ClientCard({ client, onDelete }: ClientCardProps) {
     </Card>
   );
 }
-
-    
