@@ -428,5 +428,3 @@ export function ClientCard({ client, onDelete }: ClientCardProps) {
     </Card>
   );
 }
-
-    
