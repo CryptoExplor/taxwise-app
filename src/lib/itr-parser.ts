@@ -68,8 +68,8 @@ export async function parseITR(file: File): Promise<ClientDataToSave> {
     let ay = getFromPaths(jsonData, commonPaths.ay, null);
     
     if (ay && ay.length === 4) { // e.g., "2025" -> "2025-26"
-      const startYear = parseInt(ay, 10);
-      const endYear = startYear + 1;
+      const startYear = parseInt(ay, 10) -1;
+      const endYear = parseInt(ay, 10);
       ay = `${startYear}-${endYear.toString().slice(-2)}`;
     } else {
         const ayEndYear = get(jsonData, 'incDeductionsOthIncCPC.0.itrAy', null); // Prefill format
@@ -91,7 +91,7 @@ export async function parseITR(file: File): Promise<ClientDataToSave> {
     };
     
     const incomeDetails = {
-      salary: getFromPaths(jsonData, ['PartBTI.Salaries', 'PartB_TI.Salaries', 'ScheduleS.TotIncUnderHeadSalaries'], 0),
+      salary: getFromPaths(jsonData, ['ScheduleS.TotIncUnderHeadSalaries', 'PartBTI.Salaries', 'PartB_TI.Salaries'], 0),
       houseProperty: getFromPaths(jsonData, ['PartBTI.IncomeFromHP', 'PartB_TI.IncomeFromHP', 'ScheduleHP.TotalIncomeOfHP', 'PartB-TI.IncomeFromHP'], 0),
       businessIncome: getFromPaths(jsonData, ['PartBTI.IncomeFromBP', 'PartB_TI.IncomeFromBP', 'PartA_PL.Total_BP'], 0),
       capitalGains: {
@@ -100,11 +100,11 @@ export async function parseITR(file: File): Promise<ClientDataToSave> {
         stcg: { purchase: 0, sale: 0, expenses: 0 },
         ltcg: { purchase: 0, sale: 0, expenses: 0 },
       },
-      interestIncomeFD: getFromPaths(jsonData, ['ScheduleOS.InterestFromDeposits', 'insights.intrstFrmTermDeposit', 'incomeDeductionsOthersInc.0.othSrcOthAmount', 'ScheduleOS.IncOthThanOwnRaceHorse.IntrstFrmTermDeposit'], 0),
-      interestIncomeSaving: getFromPaths(jsonData, ['ScheduleOS.InterestFromSavings', 'insights.intrstFrmSavingBank', 'incomeDeductionsOthersInc.1.othSrcOthAmount', 'ScheduleOS.IncOthThanOwnRaceHorse.IntrstFrmSavingBank'], 0),
-      dividendIncome: getFromPaths(jsonData, ['ScheduleOS.DividendInc', 'PartB_TI.IncomeFromOS.DividendGross', 'ScheduleOS.IncOthThanOwnRaceHorse.DividendGross'], 0),
-      otherSources: getFromPaths(jsonData, ['ScheduleOS.OthersInc', 'PartB_TI.IncomeFromOS.OthersGross', 'incomeDeductionsOthersInc.2.othSrcOthAmount', 'ScheduleOS.IncOthThanOwnRaceHorse.AnyOtherIncome'], 0),
-      grossTotalIncome: getFromPaths(jsonData, ['PartBTI.GrossTotalIncome', 'PartB_TI.GrossTotalIncome', 'PartB-TI.GrossTotalIncome'], 0),
+      interestIncomeFD: getFromPaths(jsonData, ['ScheduleOS.IncOthThanOwnRaceHorse.IntrstFrmTermDeposit', 'ScheduleOS.InterestFromDeposits', 'insights.intrstFrmTermDeposit', 'incomeDeductionsOthersInc.0.othSrcOthAmount'], 0),
+      interestIncomeSaving: getFromPaths(jsonData, ['ScheduleOS.IncOthThanOwnRaceHorse.IntrstFrmSavingBank', 'ScheduleOS.InterestFromSavings', 'insights.intrstFrmSavingBank', 'incomeDeductionsOthersInc.1.othSrcOthAmount'], 0),
+      dividendIncome: getFromPaths(jsonData, ['ScheduleOS.IncOthThanOwnRaceHorse.DividendGross', 'ScheduleOS.DividendInc', 'PartB_TI.IncomeFromOS.DividendGross'], 0),
+      otherSources: getFromPaths(jsonData, ['ScheduleOS.IncOthThanOwnRaceHorse.AnyOtherIncome', 'ScheduleOS.OthersInc', 'PartB_TI.IncomeFromOS.OthersGross', 'incomeDeductionsOthersInc.2.othSrcOthAmount'], 0),
+      grossTotalIncome: getFromPaths(jsonData, ['PartB_TI.GrossTotalIncome', 'PartBTI.GrossTotalIncome', 'PartB-TI.GrossTotalIncome'], 0),
     };
 
     if (incomeDetails.grossTotalIncome === 0) {
@@ -123,14 +123,14 @@ export async function parseITR(file: File): Promise<ClientDataToSave> {
     
     const deductions = {
       section80C: getFromPaths(jsonData, ['DeductUndChapVIA.Section80C', 'ScheduleVIA.Deductions.Sec80C'], 0),
-      section80D: getFromPaths(jsonData, ['DeductUndChapVIA.Section80D', 'ScheduleVIA.Deductions.Sec80D', 'ScheduleVIA.DeductUndChapVIA.Section80D'], 0),
+      section80D: getFromPaths(jsonData, ['ScheduleVIA.DeductUndChapVIA.Section80D', 'DeductUndChapVIA.Section80D', 'ScheduleVIA.Deductions.Sec80D'], 0),
       interestOnBorrowedCapital: getFromPaths(jsonData, ['ScheduleHP.InterestPayable'], 0),
       section80CCD1B: getFromPaths(jsonData, ['DeductUndChapVIA.Section80CCD_1B', 'ScheduleVIA.Deductions.Sec80CCD1B'], 0),
-      section80CCD2: getFromPaths(jsonData, ['DeductUndChapVIA.Section80CCD_2', 'ScheduleVIA.Deductions.Sec80CCD2', 'ScheduleVIA.DeductUndChapVIA.Section80CCDEmployer'], 0),
-      section80G: getFromPaths(jsonData, ['DeductUndChapVIA.Section80G', 'Schedule80G.TotalDonationAmt', 'ScheduleVIA.DeductUndChapVIA.Section80G'], 0),
+      section80CCD2: getFromPaths(jsonData, ['ScheduleVIA.DeductUndChapVIA.Section80CCDEmployer', 'DeductUndChapVIA.Section80CCD_2', 'ScheduleVIA.Deductions.Sec80CCD2'], 0),
+      section80G: getFromPaths(jsonData, ['ScheduleVIA.DeductUndChapVIA.Section80G', 'DeductUndChapVIA.Section80G', 'Schedule80G.TotalDonationAmt'], 0),
       section80TTA: getFromPaths(jsonData, ['DeductUndChapVIA.Section80TTA', 'ScheduleVIA.Deductions.Sec80TTA', 'insights.UsrDeductUndChapVIAType.Section80TTA'], 0),
-      section80TTB: getFromPaths(jsonData, ['DeductUndChapVIA.Section80TTB', 'ScheduleVIA.Deductions.Sec80TTB', 'insights.UsrDeductUndChapVIAType.Section80TTB', 'ScheduleVIA.DeductUndChapVIA.Section80TTB'], 0),
-      totalDeductions: getFromPaths(jsonData, ['PartBTI.TotalDeductions', 'PartB_TI.TotalDeductions', 'ScheduleVIA.TotalDeductions', 'ScheduleVIA.DeductUndChapVIA.TotalChapVIADeductions'], 0),
+      section80TTB: getFromPaths(jsonData, ['ScheduleVIA.DeductUndChapVIA.Section80TTB', 'DeductUndChapVIA.Section80TTB', 'ScheduleVIA.Deductions.Sec80TTB', 'insights.UsrDeductUndChapVIAType.Section80TTB'], 0),
+      totalDeductions: getFromPaths(jsonData, ['ScheduleVIA.DeductUndChapVIA.TotalChapVIADeductions', 'PartB_TI.TotalDeductions', 'PartBTI.TotalDeductions', 'ScheduleVIA.TotalDeductions'], 0),
     };
 
     if (deductions.totalDeductions === 0) {
@@ -139,10 +139,10 @@ export async function parseITR(file: File): Promise<ClientDataToSave> {
       );
     }
     
-    const taxRegimeValue = getFromPaths(jsonData, ['FilingStatus.NewTaxRegime', 'PartA_GEN1.PersonalInfo.TaxRegime', 'FilingStatus.OptOutNewTaxRegime'], 'N');
-    const taxRegime = taxRegimeValue === 'N' ? 'Old' : 'New';
+    const taxRegimeValue = getFromPaths(jsonData, ['FilingStatus.OptOutNewTaxRegime','FilingStatus.NewTaxRegime', 'PartA_GEN1.PersonalInfo.TaxRegime'], 'N');
+    const taxRegime = taxRegimeValue === 'N' ? 'New' : 'Old';
     
-    const standardDeduction = incomeDetails.salary > 0 ? getFromPaths(jsonData, ['ScheduleS.DeductionUnderSection16ia'], Math.min(incomeDetails.salary, 50000)) : 0;
+    const standardDeduction = incomeDetails.salary > 0 ? getFromPaths(jsonData, ['ScheduleS.DeductionUS16', 'ScheduleS.DeductionUnderSection16ia'], Math.min(incomeDetails.salary, 50000)) : 0;
     const oldRegimeTaxableIncome = Math.max(0, incomeDetails.grossTotalIncome - deductions.totalDeductions - standardDeduction);
     const newRegimeTaxableIncome = Math.max(0, incomeDetails.grossTotalIncome - standardDeduction);
 
@@ -163,7 +163,7 @@ export async function parseITR(file: File): Promise<ClientDataToSave> {
     const selfAssessmentTaxPayments = get(jsonData, 'ScheduleIT.TaxPayment', []);
     const selfAssessmentTax = Array.isArray(selfAssessmentTaxPayments) 
         ? selfAssessmentTaxPayments.reduce((acc: number, item: any) => acc + (get(item, 'Amt', 0) || 0), 0) 
-        : get(jsonData, 'PartB_TTI.TaxPaid.TaxesPaid.SelfAssessmentTax', 0);
+        : getFromPaths(jsonData, ['PartB_TTI.TaxPaid.TaxesPaid.SelfAssessmentTax', 'TaxPayments.SelfAssessmentTax'], 0);
 
     const tdsTotal = getFromPaths(jsonData, ['TaxPayments.TDS', 'TDS.TotalTDS', 'PartB_TTI.TaxPaid.TaxesPaid.TDS'], tdsFromSal + tdsFromOther);
     
@@ -174,7 +174,7 @@ export async function parseITR(file: File): Promise<ClientDataToSave> {
       selfAssessmentTax: selfAssessmentTax,
     };
     
-    const totalTaxPaid = getFromPaths(jsonData, ['TaxPaid.TotalTaxesPaid', 'TaxPayments.TotalTaxesPaid', 'PartB_TTI.TaxPaid.TaxesPaid.TotalTaxesPaid'], taxesPaid.tds + taxesPaid.advanceTax + taxesPaid.selfAssessmentTax + taxesPaid.tcs);
+    const totalTaxPaid = getFromPaths(jsonData, ['PartB_TTI.TaxPaid.TaxesPaid.TotalTaxesPaid', 'TaxPaid.TotalTaxesPaid', 'TaxPayments.TotalTaxesPaid'], taxesPaid.tds + taxesPaid.advanceTax + taxesPaid.selfAssessmentTax + taxesPaid.tcs);
 
     const finalAmount = taxComputationResult.totalTaxLiability - totalTaxPaid;
 
