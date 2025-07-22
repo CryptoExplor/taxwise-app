@@ -18,6 +18,11 @@ export interface IncomeDetails {
   grossTotalIncome: number;
 }
 
+export interface CustomDeduction {
+  id: string;
+  label: string;
+  value: number;
+}
 
 export interface Deductions {
   section80C: number;
@@ -29,6 +34,7 @@ export interface Deductions {
   section80TTA?: number;
   section80TTB?: number;
   totalDeductions: number;
+  customDeductions?: CustomDeduction[];
 }
 
 

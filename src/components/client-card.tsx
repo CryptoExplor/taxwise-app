@@ -25,6 +25,7 @@ import {
   Trash2,
   FileText,
   ChevronDown,
+  Plus,
 } from "lucide-react";
 import { generatePDF } from "@/lib/pdf-exporter";
 import { useState, useTransition, useEffect, useMemo } from "react";
@@ -71,8 +72,6 @@ const ComputationRow = ({
   value,
   isBold = false,
   isTotal = false,
-  isEditable = false,
-  onChange,
   isSubItem = false,
   isFinal = false,
   textColor,
@@ -81,8 +80,6 @@ const ComputationRow = ({
   value: number | string;
   isBold?: boolean;
   isTotal?: boolean;
-  isEditable?: boolean;
-  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   isSubItem?: boolean;
   isFinal?: boolean;
   textColor?: string;
@@ -102,17 +99,7 @@ const ComputationRow = ({
       <td
         className={`p-2 text-right pr-4 font-mono ${finalStyle} ${textColor}`}
       >
-        {isEditable ? (
-          <Input
-            type="text"
-            value={value}
-            onChange={onChange}
-            className="h-8 text-right bg-background"
-            onFocus={(e) => e.target.select()}
-          />
-        ) : (
-          valueFormatted
-        )}
+        {valueFormatted}
       </td>
     </tr>
   );
@@ -137,26 +124,64 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
     setDisplayRegime(client.taxRegime);
   }, [client, isEditing, isNewClient]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, path: string) => {
-    const { value } = e.target;
-    // Remove formatting for calculation
-    const numericValue = parseFloat(value.replace(/,/g, '')) || 0;
-    
-    setEditableData(prev => {
-        const newData = JSON.parse(JSON.stringify(prev)); // Deep copy
-        let currentLevel: any = newData;
-        const pathArray = path.split('.');
-        pathArray.forEach((key, index) => {
-            if (index === pathArray.length - 1) {
-                currentLevel[key] = numericValue;
-            } else {
-                currentLevel = currentLevel[key];
-            }
+
+  const handleIncomeChange = (field: keyof Omit<ClientData['incomeDetails'], 'capitalGains' | 'grossTotalIncome'>, value: string) => {
+        const numericValue = parseFloat(value) || 0;
+        setEditableData(prev => {
+            const newIncomeDetails = { ...prev.incomeDetails, [field]: numericValue };
+            const newData = { ...prev, incomeDetails: newIncomeDetails };
+            return recomputeAll(newData);
         });
+  };
+
+  const handleDeductionChange = (field: keyof Omit<ClientData['deductions'], 'totalDeductions' | 'customDeductions'>, value: string) => {
+    const numericValue = parseFloat(value) || 0;
+    setEditableData(prev => {
+        const newDeductions = { ...prev.deductions, [field]: numericValue };
+        const newData = { ...prev, deductions: newDeductions };
         return recomputeAll(newData);
     });
   };
   
+  const handleCustomDeductionChange = (id: string, field: 'label' | 'value', value: string | number) => {
+    setEditableData(prev => {
+        const newCustomDeductions = prev.deductions.customDeductions?.map(d => {
+            if (d.id === id) {
+                return { ...d, [field]: field === 'value' ? (parseFloat(value as string) || 0) : value };
+            }
+            return d;
+        });
+        const newDeductions = { ...prev.deductions, customDeductions: newCustomDeductions };
+        return recomputeAll({ ...prev, deductions: newDeductions });
+    });
+  };
+
+  const handleAddCustomDeduction = () => {
+      setEditableData(prev => {
+          const newDeduction = { id: `custom_${Date.now()}`, label: '', value: 0 };
+          const customDeductions = [...(prev.deductions.customDeductions || []), newDeduction];
+          const newDeductions = { ...prev.deductions, customDeductions };
+          return { ...prev, deductions: newDeductions };
+      });
+  };
+
+  const handleRemoveCustomDeduction = (id: string) => {
+      setEditableData(prev => {
+          const customDeductions = prev.deductions.customDeductions?.filter(d => d.id !== id);
+          const newDeductions = { ...prev.deductions, customDeductions };
+          return recomputeAll({ ...prev, deductions: newDeductions });
+      });
+  };
+
+  const handleTdsChange = (field: 'tds' | 'selfAssessmentTax', value: string) => {
+    const numericValue = parseFloat(value) || 0;
+    setEditableData(prev => {
+        const newTaxesPaid = { ...prev.taxesPaid, [field]: numericValue };
+        const newData = { ...prev, taxesPaid: newTaxesPaid };
+        return recomputeAll(newData);
+    });
+  };
+
   const handleCapitalGainChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'stcg' | 'ltcg') => {
     const { name, value } = e.target;
     const numericValue = parseFloat(value) || 0;
@@ -188,7 +213,8 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
         (data.incomeDetails.dividendIncome || 0) +
         data.incomeDetails.otherSources;
     
-    // Recalculate Total Deductions
+    // Recalculate Total Deductions from both standard and custom fields
+    const customDeductionsTotal = data.deductions.customDeductions?.reduce((acc, d) => acc + d.value, 0) || 0;
     data.deductions.totalDeductions = 
         (data.deductions.section80C || 0) + 
         (data.deductions.section80D || 0) +
@@ -197,7 +223,8 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
         (data.deductions.section80CCD2 || 0) +
         (data.deductions.section80G || 0) +
         (data.deductions.section80TTA || 0) +
-        (data.deductions.section80TTB || 0);
+        (data.deductions.section80TTB || 0) +
+        customDeductionsTotal;
 
     const standardDeduction = data.incomeDetails.salary > 0 ? Math.min(data.incomeDetails.salary, 50000) : 0;
     
@@ -228,20 +255,17 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
     if (!user) return;
     setIsSaving(true);
     
-    // Create a plain object for saving, excluding complex types or fields managed by the server
     const { id, createdAt, ...dataToSave } = editableData;
     const plainData = JSON.parse(JSON.stringify(dataToSave));
 
     try {
       if (isNewClient) {
-        // Add new document with server timestamp
         const clientsCollectionRef = collection(db, `users/${user.uid}/clients`);
         const docRef = await addDoc(clientsCollectionRef, { ...plainData, createdAt: serverTimestamp() });
         toast({ title: "Success", description: "Client data saved successfully." });
-        onSave({ ...editableData, id: docRef.id }); // Notify parent with the new ID
-        setIsEditing(false); // Exit edit mode after saving
+        onSave({ ...editableData, id: docRef.id }); 
+        setIsEditing(false); 
       } else {
-        // Update existing document
         const docRef = doc(db, `users/${user.uid}/clients`, id);
         await updateDoc(docRef, plainData);
         toast({ title: "Success", description: "Client data updated successfully." });
@@ -258,7 +282,7 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
 
   const handleCancel = () => {
       if (isNewClient) {
-          onDelete(client.id); // Remove temporary client from dashboard
+          onDelete(client.id); 
       } else {
           setIsEditing(false);
           setEditableData(client);
@@ -267,7 +291,6 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
   };
   
   const handleExport = async () => {
-    // Export PDF based on the currently displayed regime
     const dataForPdf = { ...editableData, taxRegime: displayRegime };
     await generatePDF(dataForPdf, "Generated by TaxWise");
   };
@@ -282,7 +305,7 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
     try {
         await deleteDoc(doc(db, `users/${user.uid}/clients`, client.id));
         toast({ title: "Client Removed", description: `${client.personalInfo.name} has been deleted.` });
-        onDelete(client.id); // This will trigger the parent to update its state
+        onDelete(client.id);
     } catch (error) {
         console.error("Error deleting client:", error);
         toast({ variant: "destructive", title: "Delete Failed", description: "Could not remove the client." });
@@ -291,7 +314,6 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
     }
   };
 
-  // Determine which computation to show based on the toggle
   const computationToShow = displayRegime === 'Old'
     ? editableData.taxComparison?.oldRegime
     : editableData.taxComparison?.newRegime;
@@ -302,7 +324,6 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
     ? Math.max(0, editableData.incomeDetails.grossTotalIncome - editableData.deductions.totalDeductions - standardDeduction)
     : Math.max(0, editableData.incomeDetails.grossTotalIncome - standardDeduction);
 
-
   const finalAmount = computationToShow ? (computationToShow.totalTaxLiability - editableData.taxesPaid.totalTaxPaid) : 0;
   const netPayable = Math.max(0, finalAmount);
   const refund = Math.max(0, -finalAmount);
@@ -312,13 +333,18 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
       { name: 'New Regime', Tax: editableData.taxComparison.newRegime.totalTaxLiability },
   ] : [];
 
-  const stcg = editableData.incomeDetails.capitalGains.stcg;
-  const stcgProfit = stcg.sale - stcg.purchase - stcg.expenses;
-  
-  const ltcg = editableData.incomeDetails.capitalGains.ltcg;
-  const ltcgProfit = ltcg.sale - ltcg.purchase - ltcg.expenses;
-  
   const computeCapitalGain = (data: {sale: number, purchase: number, expenses: number}) => (data.sale - data.purchase - data.expenses);
+
+  const regularDeductions = [
+    { key: 'section80C', label: 'Section 80C' },
+    { key: 'section80D', label: 'Section 80D (Health)' },
+    { key: 'interestOnBorrowedCapital', label: 'Interest on Home Loan' },
+    { key: 'section80CCD1B', label: '80CCD(1B)' },
+    { key: 'section80CCD2', label: '80CCD(2)' },
+    { key: 'section80G', label: '80G (Donations)' },
+    { key: 'section80TTA', label: '80TTA (Savings Interest)' },
+    { key: 'section80TTB', label: '80TTB (Senior Citizen)' },
+  ] as const;
 
 
   return (
@@ -381,59 +407,40 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
                         <ComputationRow label="Name" value={editableData.personalInfo.name} isBold={true} />
                         <ComputationRow label="PAN" value={editableData.personalInfo.pan} isBold={true} />
                         
-                        {/* --- Income Section --- */}
                         <tr className="bg-muted/30"><td colSpan={2} className="p-2 pl-4 font-bold">Income Particulars</td></tr>
-                        <ComputationRow label="Income from Salary" value={editableData.incomeDetails.salary} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'incomeDetails.salary')} />
-                        <ComputationRow label="Income from House Property" value={editableData.incomeDetails.houseProperty} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'incomeDetails.houseProperty')} />
-                        <ComputationRow label="Income from Business" value={editableData.incomeDetails.businessIncome} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'incomeDetails.businessIncome')} />
+                        <ComputationRow label="Income from Salary" value={editableData.incomeDetails.salary} />
+                        <ComputationRow label="Income from House Property" value={editableData.incomeDetails.houseProperty} />
+                        <ComputationRow label="Income from Business" value={editableData.incomeDetails.businessIncome} />
                         <ComputationRow label="Capital Gains" value={editableData.incomeDetails.capitalGains.shortTerm + editableData.incomeDetails.capitalGains.longTerm} />
                         
                         <tr className="bg-muted/30"><td colSpan={2} className="p-2 pl-4 font-bold">Other Sources</td></tr>
-                        <ComputationRow label="Interest Income (FD, etc.)" value={editableData.incomeDetails.interestIncomeFD || 0} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'incomeDetails.interestIncomeFD')} isSubItem={true} />
-                        <ComputationRow label="Interest Income (Savings)" value={editableData.incomeDetails.interestIncomeSaving || 0} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'incomeDetails.interestIncomeSaving')} isSubItem={true} />
-                        <ComputationRow label="Dividend Income" value={editableData.incomeDetails.dividendIncome || 0} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'incomeDetails.dividendIncome')} isSubItem={true} />
-                        <ComputationRow label="Other Income" value={editableData.incomeDetails.otherSources} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'incomeDetails.otherSources')} isSubItem={true} />
+                        <ComputationRow label="Interest Income (FD, etc.)" value={editableData.incomeDetails.interestIncomeFD || 0} isSubItem={true} />
+                        <ComputationRow label="Interest Income (Savings)" value={editableData.incomeDetails.interestIncomeSaving || 0} isSubItem={true} />
+                        <ComputationRow label="Dividend Income" value={editableData.incomeDetails.dividendIncome || 0} isSubItem={true} />
+                        <ComputationRow label="Other Income" value={editableData.incomeDetails.otherSources} isSubItem={true} />
 
                         <ComputationRow label="Gross Total Income" value={editableData.incomeDetails.grossTotalIncome} isTotal={true}/>
 
-                        {/* --- Deductions Section --- */}
-                         {displayRegime === 'Old' && (
-                            <>
-                                <ComputationRow label="Less: Standard Deduction u/s 16(ia)" value={-standardDeduction} />
-                                <ComputationRow label="Less: Interest on Home Loan" value={-(editableData.deductions.interestOnBorrowedCapital || 0)} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.interestOnBorrowedCapital')} />
-                                <ComputationRow label="Less: Deductions u/s 80C" value={-(editableData.deductions.section80C || 0)} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80C')} />
-                                <ComputationRow label="Less: Deductions u/s 80D (Health)" value={-(editableData.deductions.section80D || 0)} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80D')} />
-                                <ComputationRow label="Less: 80CCD(1B)" value={-(editableData.deductions.section80CCD1B || 0)} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80CCD1B')} />
-                                <ComputationRow label="Less: 80CCD(2)" value={-(editableData.deductions.section80CCD2 || 0)} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80CCD2')} />
-                                <ComputationRow label="Less: 80G (Donations)" value={-(editableData.deductions.section80G || 0)} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80G')} />
-                                <ComputationRow label="Less: 80TTA (Savings Interest)" value={-(editableData.deductions.section80TTA || 0)} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80TTA')} />
-                                <ComputationRow label="Less: 80TTB (Senior Citizen)" value={-(editableData.deductions.section80TTB || 0)} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80TTB')} />
-                            </>
-                         )}
-                         {displayRegime === 'New' && (
-                            <ComputationRow label="Less: Standard Deduction u/s 16(ia)" value={-standardDeduction} />
-                         )}
-
+                        {displayRegime === 'Old' && <ComputationRow label="Less: Total Deductions" value={-editableData.deductions.totalDeductions} />}
+                        <ComputationRow label="Less: Standard Deduction" value={-standardDeduction} />
+                        
                         <ComputationRow label="NET TAXABLE AMOUNT" value={taxableIncomeToShow} isTotal={true}/>
 
-                        {/* --- Tax Calculation Section --- */}
                         <tr className="bg-muted/30"><td colSpan={2} className="p-2 pl-4 font-bold">Tax on Total Income</td></tr>
                         {computationToShow.slabBreakdown?.map((slab, i) => (
                             <ComputationRow key={i} label={`On ${formatCurrency(slab.amount)} @ ${slab.rate}%`} value={slab.tax} isSubItem={true} />
                         ))}
-                        <ComputationRow label="Short Term Capital Gain @ 15%" value={computationToShow.taxOnSTCG} isSubItem={true} />
-                        <ComputationRow label="Long Term Capital Gain @ 10%" value={computationToShow.taxOnLTCG} isSubItem={true} />
+                        <ComputationRow label="Short Term Capital Gain @ Special Rate" value={computationToShow.taxOnSTCG} isSubItem={true} />
+                        <ComputationRow label="Long Term Capital Gain @ Special Rate" value={computationToShow.taxOnLTCG} isSubItem={true} />
                         
                         <ComputationRow label="Total Tax" value={computationToShow.taxBeforeCess} isBold={true} />
                         <ComputationRow label="Less: Rebate u/s 87A" value={-computationToShow.rebate} />
                         <ComputationRow label="Add: Education Cess (4%)" value={computationToShow.cess} />
                         <ComputationRow label="TOTAL TAX PAYABLE" value={computationToShow.totalTaxLiability} isTotal={true}/>
 
-                        {/* --- TDS Section --- */}
-                        <ComputationRow label="Less: T.D.S." value={-editableData.taxesPaid.tds} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'taxesPaid.tds')} />
-                        <ComputationRow label="Less: Self Assessment Tax" value={-(editableData.taxesPaid.selfAssessmentTax || 0)} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'taxesPaid.selfAssessmentTax')} />
+                        <ComputationRow label="Less: T.D.S." value={-editableData.taxesPaid.tds} />
+                        <ComputationRow label="Less: Self Assessment Tax" value={-editableData.taxesPaid.selfAssessmentTax} />
 
-                        {/* --- Final Amount --- */}
                          <ComputationRow 
                             label={netPayable > 0 ? "Amount to be PAYABLE" : "Refundable"} 
                             value={netPayable > 0 ? netPayable : refund} 
@@ -447,7 +454,29 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
           </div>
           
            
-        <div className="p-4 mt-4 border-t">
+        <div className="p-4 mt-4 space-y-4 border-t">
+             <Card className="bg-muted/30 shadow-sm">
+                <CardHeader>
+                    <CardTitle>Income Manual Entry</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                     <div className="grid grid-cols-2 gap-4">
+                        {(['salary', 'houseProperty', 'businessIncome', 'interestIncomeFD', 'interestIncomeSaving', 'dividendIncome', 'otherSources'] as const).map(field => (
+                            <div key={field}>
+                                <Label htmlFor={field} className="capitalize">{field.replace(/([A-Z])/g, ' $1').replace('F D', 'FD')}</Label>
+                                <Input
+                                    id={field}
+                                    type="number"
+                                    value={editableData.incomeDetails[field] || 0}
+                                    onChange={(e) => handleIncomeChange(field, e.target.value)}
+                                    readOnly={!isEditing}
+                                />
+                            </div>
+                        ))}
+                    </div>
+                </CardContent>
+             </Card>
+
              <Card className="bg-muted/30 shadow-sm">
                 <CardHeader>
                     <CardTitle>Capital Gains Manual Entry</CardTitle>
@@ -509,6 +538,68 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
                     ))}
                 </CardContent>
             </Card>
+
+             <Card className="bg-muted/30 shadow-sm">
+                <CardHeader><CardTitle>Deductions Manual Entry</CardTitle></CardHeader>
+                 <CardContent className="space-y-4">
+                    {regularDeductions.map(({key, label}) => (
+                         <div key={key} className="grid grid-cols-2 items-center">
+                            <Label htmlFor={key}>{label}</Label>
+                            <Input 
+                                id={key}
+                                type="number"
+                                value={editableData.deductions[key] || 0}
+                                onChange={(e) => handleDeductionChange(key, e.target.value)}
+                                readOnly={!isEditing || displayRegime === 'New'}
+                                disabled={!isEditing || displayRegime === 'New'}
+                            />
+                         </div>
+                    ))}
+                    <Separator />
+                    <h4 className="font-semibold text-md text-muted-foreground">Custom Deductions</h4>
+                    {editableData.deductions.customDeductions?.map((deduction) => (
+                        <div key={deduction.id} className="grid grid-cols-[1fr,1fr,auto] gap-2 items-center">
+                            <Input
+                                placeholder="Deduction Name (e.g., 80E)"
+                                value={deduction.label}
+                                onChange={(e) => handleCustomDeductionChange(deduction.id, 'label', e.target.value)}
+                                readOnly={!isEditing || displayRegime === 'New'}
+                                disabled={!isEditing || displayRegime === 'New'}
+                            />
+                             <Input
+                                type="number"
+                                placeholder="Amount"
+                                value={deduction.value}
+                                onChange={(e) => handleCustomDeductionChange(deduction.id, 'value', e.target.value)}
+                                readOnly={!isEditing || displayRegime === 'New'}
+                                disabled={!isEditing || displayRegime === 'New'}
+                            />
+                            <Button variant="ghost" size="icon" onClick={() => handleRemoveCustomDeduction(deduction.id)} disabled={!isEditing || displayRegime === 'New'}>
+                                <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
+                        </div>
+                    ))}
+                    <Button variant="outline" size="sm" onClick={handleAddCustomDeduction} disabled={!isEditing || displayRegime === 'New'}>
+                        <Plus className="w-4 h-4 mr-2" /> Add Custom Deduction
+                    </Button>
+                     {displayRegime === 'New' && <p className="text-xs text-muted-foreground">Most deductions are not applicable under the New Regime.</p>}
+                 </CardContent>
+             </Card>
+
+              <Card className="bg-muted/30 shadow-sm">
+                <CardHeader><CardTitle>Taxes Paid Manual Entry</CardTitle></CardHeader>
+                <CardContent className="grid grid-cols-2 gap-4">
+                    <div>
+                        <Label htmlFor="tds">TDS</Label>
+                        <Input id="tds" type="number" value={editableData.taxesPaid.tds} onChange={e => handleTdsChange('tds', e.target.value)} readOnly={!isEditing} />
+                    </div>
+                     <div>
+                        <Label htmlFor="selfAssessmentTax">Self Assessment Tax</Label>
+                        <Input id="selfAssessmentTax" type="number" value={editableData.taxesPaid.selfAssessmentTax} onChange={e => handleTdsChange('selfAssessmentTax', e.target.value)} readOnly={!isEditing} />
+                    </div>
+                </CardContent>
+              </Card>
+
         </div>
         
 
@@ -561,3 +652,4 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
     </Card>
   );
 }
+
