@@ -127,6 +127,10 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
             deductions: {
                 ...client.deductions,
                 customDeductions: Array.isArray(client.deductions.customDeductions) ? client.deductions.customDeductions : []
+            },
+            incomeDetails: {
+                 ...client.incomeDetails,
+                customIncomes: Array.isArray(client.incomeDetails.customIncomes) ? client.incomeDetails.customIncomes : []
             }
         };
         setEditableData(dataWithInitializedDeductions);
@@ -549,9 +553,11 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
                             </Button>
                         </div>
                     ))}
-                    <Button variant="outline" size="sm" onClick={handleAddCustomIncome} disabled={!isEditing}>
-                        <Plus className="w-4 h-4 mr-2" /> Add Custom Income
-                    </Button>
+                    {isEditing && (
+                        <Button variant="outline" size="sm" onClick={handleAddCustomIncome}>
+                            <Plus className="w-4 h-4 mr-2" /> Add Custom Income
+                        </Button>
+                    )}
                 </CardContent>
              </Card>
 
@@ -627,8 +633,8 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
                                     className="w-1/2"
                                     value={editableData.deductions[key] || 0}
                                     onChange={(e) => handleDeductionChange(key, e.target.value)}
-                                    readOnly={!isEditing || displayRegime === 'New'}
-                                    disabled={!isEditing || displayRegime === 'New'}
+                                    readOnly={!isEditing || (displayRegime === 'New' && key !== 'section80CCD2')}
+                                    disabled={!isEditing || (displayRegime === 'New' && key !== 'section80CCD2')}
                                 />
                             </div>
                         ))}
@@ -652,15 +658,19 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
                                 readOnly={!isEditing || displayRegime === 'New'}
                                 disabled={!isEditing || displayRegime === 'New'}
                             />
-                            <Button variant="ghost" size="icon" onClick={() => handleRemoveCustomDeduction(deduction.id)} disabled={!isEditing || displayRegime === 'New'}>
-                                <Trash2 className="w-4 h-4 text-destructive" />
-                            </Button>
+                            {isEditing && (
+                                <Button variant="ghost" size="icon" onClick={() => handleRemoveCustomDeduction(deduction.id)} disabled={!isEditing || displayRegime === 'New'}>
+                                    <Trash2 className="w-4 h-4 text-destructive" />
+                                </Button>
+                            )}
                         </div>
                     ))}
-                    <Button variant="outline" size="sm" onClick={handleAddCustomDeduction} disabled={!isEditing || displayRegime === 'New'}>
-                        <Plus className="w-4 h-4 mr-2" /> Add Custom Deduction
-                    </Button>
-                     {displayRegime === 'New' && <p className="text-xs text-muted-foreground">Most deductions are not applicable under the New Regime.</p>}
+                    {isEditing && (
+                        <Button variant="outline" size="sm" onClick={handleAddCustomDeduction} disabled={displayRegime === 'New'}>
+                            <Plus className="w-4 h-4 mr-2" /> Add Custom Deduction
+                        </Button>
+                    )}
+                     {displayRegime === 'New' && <p className="text-xs text-muted-foreground mt-2">Most deductions are not applicable under the New Regime, except for employer's contribution to NPS u/s 80CCD(2).</p>}
                  </CardContent>
              </Card>
 
@@ -730,7 +740,3 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
     </Card>
   );
 }
-
-    
-
-    
