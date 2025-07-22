@@ -95,7 +95,7 @@ export function Dashboard() {
         
         const parsedData = await parseITR(file);
         
-        const docRef = await addDoc(clientsCollectionRef, parsedData);
+        const docRef = await addDoc(clientsCollectionRef, { ...parsedData, createdAt: new Date() });
 
         startTransition(() => {
             const { taxComputation, aiSummary, aiTips, ...aiInput } = parsedData;
@@ -155,10 +155,10 @@ export function Dashboard() {
           incomeDetails: { 
               salary: 0, houseProperty: 0, businessIncome: 0, 
               capitalGains: { shortTerm: 0, longTerm: 0, stcg: { purchase: 0, sale: 0, expenses: 0 }, ltcg: { purchase: 0, sale: 0, expenses: 0 } },
-              otherSources: 0, grossTotalIncome: 0 
+              otherSources: 0, grossTotalIncome: 0, customIncomes: [],
           },
-          deductions: { section80C: 0, section80D: 0, totalDeductions: 0 },
-          taxesPaid: { tds: 0, selfAssessmentTax: 0, advanceTax: 0, totalTaxPaid: 0 },
+          deductions: { section80C: 0, section80D: 0, totalDeductions: 0, customDeductions: [] },
+          taxesPaid: { tds: 0, tcs: 0, advanceTax: 0, selfAssessmentTax: 0, totalTaxPaid: 0 },
           taxRegime: 'New',
           taxComputation: { ...emptyTaxComputation, netTaxPayable: 0, refund: 0 },
           taxComparison: { oldRegime: emptyTaxComputation, newRegime: emptyTaxComputation },
@@ -225,19 +225,21 @@ export function Dashboard() {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            {clients.length > 0 && (
-                <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                    <Input 
-                        type="text"
-                        placeholder="Search by Name or PAN..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-10 w-64"
-                    />
-                </div>
-            )}
+            <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Input 
+                    type="text"
+                    placeholder="Search by Name or PAN..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10 w-64"
+                />
+            </div>
             <div className="flex gap-2">
+              <Button onClick={handleUploadClick} variant="outline" disabled={isProcessing}>
+                  <UploadCloud className="mr-2 h-4 w-4" />
+                  Upload ITR
+              </Button>
               <Button onClick={handleNewManualComputation} disabled={isProcessing}>
                   <PlusCircle className="mr-2 h-4 w-4" />
                   New Computation
@@ -278,9 +280,6 @@ export function Dashboard() {
                       </li>
                       <li className="capitalize">
                           Current Plan: <span className="font-semibold text-foreground">{userProfile?.plan || 'Free'}</span>
-                      </li>
-                       <li>
-                          <span className="font-semibold text-foreground">{clients.filter(c=>!c.id.startsWith('temp')).length}</span> Reports generated
                       </li>
                   </ul>
               </CardContent>

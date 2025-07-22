@@ -47,6 +47,7 @@ export interface Deductions {
 
 export interface TaxesPaid {
   tds: number;
+  tcs: number;
   selfAssessmentTax: number;
   advanceTax: number;
   totalTaxPaid: number;
@@ -111,5 +112,3 @@ export interface ClientData extends ClientDataToSave {
   id: string;
   createdAt: Timestamp; // Firestore returns a Timestamp object
 }
-
-    
