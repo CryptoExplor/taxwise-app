@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useEffect, useState } from "react";
@@ -14,25 +15,6 @@ import {
 } from "firebase/firestore";
 import { useAuth } from "@/components/auth-provider";
 import { useToast } from "@/hooks/use-toast";
-import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Loader } from "lucide-react";
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from "@/components/ui/table";
 
 interface User {
   id: string;
@@ -108,6 +90,7 @@ export default function EmployeeManagementPage() {
           title: "Not Found",
           description: "CA user with this email not found.",
         });
+        setActionLoading(false);
         return;
       }
 
@@ -169,109 +152,111 @@ export default function EmployeeManagementPage() {
 
   return (
     <div className="space-y-8">
-      <div className="p-6 border rounded-lg bg-card">
+      <div className="p-6 border rounded-lg bg-white dark:bg-gray-800">
         <h3 className="text-xl font-semibold mb-4">Assign User as Employee</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
           <div className="space-y-2">
-            <Label htmlFor="user-select">Select User to Assign:</Label>
-            <Select onValueChange={setSelectedUserId} value={selectedUserId} disabled={actionLoading}>
-              <SelectTrigger id="user-select">
-                <SelectValue placeholder="-- Select a User --" />
-              </SelectTrigger>
-              <SelectContent>
-                {users
-                  .filter((u) => u.plan !== "admin" && u.role !== "employee")
-                  .map((user) => (
-                    <SelectItem key={user.id} value={user.id}>
-                      {user.email} (Plan: {user.plan})
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
+            <label htmlFor="user-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Select User to Assign:</label>
+            <select 
+              id="user-select" 
+              onChange={(e) => setSelectedUserId(e.target.value)} 
+              value={selectedUserId} 
+              disabled={actionLoading}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+            >
+              <option value="">-- Select a User --</option>
+              {users
+                .filter((u) => u.plan !== "admin" && u.role !== "employee")
+                .map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.email} (Plan: {user.plan})
+                  </option>
+                ))}
+            </select>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="ca-email">Assign to CA (Email):</Label>
+            <label htmlFor="ca-email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Assign to CA (Email):</label>
             <div className="flex gap-2">
-                 <Input
+                 <input
                     type="email"
                     id="ca-email"
                     value={caUserEmail}
                     onChange={(e) => setCaUserEmail(e.target.value)}
                     placeholder="Enter CA's email (agency plan)"
                     disabled={actionLoading}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                 />
-                 <Select onValueChange={setCaUserEmail} value={caUserEmail} disabled={actionLoading}>
-                    <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="Or Select CA"/>
-                    </SelectTrigger>
-                    <SelectContent>
-                        {caUsers.map(ca => (
-                           <SelectItem key={ca.id} value={ca.email!}>{ca.email}</SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
+                 <select 
+                    onChange={(e) => setCaUserEmail(e.target.value)} 
+                    value={caUserEmail} 
+                    disabled={actionLoading}
+                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                 >
+                    <option value="">Or Select CA</option>
+                    {caUsers.map(ca => (
+                       <option key={ca.id} value={ca.email!}>{ca.email}</option>
+                    ))}
+                </select>
             </div>
           </div>
         </div>
-        <Button
+        <button
           onClick={assignEmployeeToCA}
           disabled={!selectedUserId || !caUserEmail || actionLoading}
-          className="mt-6"
+          className="mt-6 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400"
         >
-          {actionLoading ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : null}
-          Assign Employee
-        </Button>
+          {actionLoading ? 'Assigning...' : 'Assign Employee'}
+        </button>
       </div>
 
       <div>
-        <h3 className="text-xl font-semibold mb-4 text-foreground">
+        <h3 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
           Current Employee Assignments
         </h3>
-        <div className="overflow-x-auto bg-card rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Employee Email</TableHead>
-                <TableHead>Assigned to CA Email</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+        <div className="overflow-x-auto bg-white dark:bg-gray-800 rounded-lg border">
+          <table className="min-w-full">
+            <thead>
+              <tr className="bg-gray-100 dark:bg-gray-700">
+                <th className="py-3 px-4 text-left text-sm font-semibold uppercase">Employee Email</th>
+                <th className="py-3 px-4 text-left text-sm font-semibold uppercase">Assigned to CA Email</th>
+                <th className="py-3 px-4 text-left text-sm font-semibold uppercase">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
               {loading ? (
-                <TableRow>
-                  <TableCell colSpan={3} className="text-center h-24">
-                    <Loader className="mx-auto animate-spin text-primary" />
-                  </TableCell>
-                </TableRow>
+                <tr>
+                  <td colSpan={3} className="text-center h-24">
+                    Loading...
+                  </td>
+                </tr>
               ) : assignedEmployees.length > 0 ? (
                 assignedEmployees.map((employee) => {
                   const caUser = users.find((u) => u.id === employee.caAccountId);
                   return (
-                    <TableRow key={employee.id}>
-                      <TableCell>{employee.email}</TableCell>
-                      <TableCell>{caUser?.email || "N/A"}</TableCell>
-                      <TableCell>
-                        <Button
-                          variant="destructive"
-                          size="sm"
+                    <tr key={employee.id} className="border-b dark:border-gray-700">
+                      <td className="py-3 px-4">{employee.email}</td>
+                      <td className="py-3 px-4">{caUser?.email || "N/A"}</td>
+                      <td className="py-3 px-4">
+                        <button
                           onClick={() => removeEmployeeAssignment(employee.id)}
                           disabled={actionLoading}
+                          className="px-3 py-1 bg-red-600 text-white rounded-md text-sm hover:bg-red-700 disabled:bg-gray-400"
                         >
                           Remove
-                        </Button>
-                      </TableCell>
-                    </TableRow>
+                        </button>
+                      </td>
+                    </tr>
                   );
                 })
               ) : (
-                <TableRow>
-                  <TableCell colSpan={3} className="text-center h-24">
+                <tr>
+                  <td colSpan={3} className="text-center h-24">
                     No employee assignments found.
-                  </TableCell>
-                </TableRow>
+                  </td>
+                </tr>
               )}
-            </TableBody>
-          </Table>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

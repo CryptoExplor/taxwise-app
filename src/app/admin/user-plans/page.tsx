@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -8,24 +9,7 @@ import {
   doc,
   updateDoc,
 } from "firebase/firestore";
-import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 
 
@@ -110,55 +94,51 @@ export default function UserPlansPage() {
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <Loader className="w-8 h-8 animate-spin text-primary" />
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
       </div>
     );
   }
 
   return (
-    <div className="overflow-x-auto bg-card rounded-lg border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>User ID</TableHead>
-            <TableHead>Email</TableHead>
-            <TableHead>Plan</TableHead>
-            <TableHead>Role</TableHead>
-            <TableHead>Change Plan</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
+    <div className="overflow-x-auto bg-white dark:bg-gray-800 rounded-lg border">
+      <table className="min-w-full">
+        <thead className="bg-gray-100 dark:bg-gray-700">
+          <tr>
+            <th className="py-3 px-4 text-left text-sm font-semibold uppercase">User ID</th>
+            <th className="py-3 px-4 text-left text-sm font-semibold uppercase">Email</th>
+            <th className="py-3 px-4 text-left text-sm font-semibold uppercase">Plan</th>
+            <th className="py-3 px-4 text-left text-sm font-semibold uppercase">Role</th>
+            <th className="py-3 px-4 text-left text-sm font-semibold uppercase">Change Plan</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
           {users.map((u) => (
-            <TableRow key={u.id}>
-              <TableCell className="font-mono text-xs">{u.id}</TableCell>
-              <TableCell>{u.email}</TableCell>
-              <TableCell className="capitalize">{u.plan || "free"}</TableCell>
-              <TableCell className="capitalize">{u.role || "user"}</TableCell>
-              <TableCell>
+            <tr key={u.id}>
+              <td className="py-3 px-4 font-mono text-xs">{u.id}</td>
+              <td className="py-3 px-4">{u.email}</td>
+              <td className="py-3 px-4 capitalize">{u.plan || "free"}</td>
+              <td className="py-3 px-4 capitalize">{u.role || "user"}</td>
+              <td className="py-3 px-4">
                 <div className="flex items-center gap-2">
-                  <Select
-                    defaultValue={u.plan || 'free'}
-                    onValueChange={(value) => handlePlanChange(u.id, value)}
+                  <select
+                    value={u.plan || 'free'}
+                    onChange={(e) => handlePlanChange(u.id, e.target.value)}
                     disabled={updating === u.id}
+                    className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                   >
-                    <SelectTrigger className="w-[180px]">
-                      <SelectValue placeholder="Select a plan" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="free">Free</SelectItem>
-                      <SelectItem value="family">Family</SelectItem>
-                      <SelectItem value="pro">Pro</SelectItem>
-                      <SelectItem value="agency">Agency</SelectItem>
-                      <SelectItem value="admin">Admin</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {updating === u.id && <Loader className="w-4 h-4 animate-spin" />}
+                    <option value="free">Free</option>
+                    <option value="family">Family</option>
+                    <option value="pro">Pro</option>
+                    <option value="agency">Agency</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                  {updating === u.id && <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>}
                 </div>
-              </TableCell>
-            </TableRow>
+              </td>
+            </tr>
           ))}
-        </TableBody>
-      </Table>
+        </tbody>
+      </table>
     </div>
   );
 }

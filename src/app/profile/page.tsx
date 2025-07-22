@@ -5,14 +5,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { doc, getDoc, updateDoc, setDoc } from 'firebase/firestore';
 import { useAuth } from '@/components/auth-provider';
 import { db } from '@/lib/firebase';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Loader, User, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
+
+const UserIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-10 w-10 text-blue-600"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>;
+const ArrowLeftIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 h-4 w-4"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>;
 
 interface UserProfile {
     email: string;
@@ -46,16 +43,18 @@ const ProfilePage = () => {
                     address: data.address || '',
                 });
             } else {
-                // If doc doesn't exist, create it with default values
-                const newProfile = {
-                    email: user.email || '',
-                    name: user.displayName || '',
-                    pan: '',
-                    phone: '',
-                    address: '',
-                };
-                await setDoc(userDocRef, newProfile);
-                setProfile(newProfile);
+                // If doc doesn't exist, create it with default values for non-anonymous users
+                 if (!user.isAnonymous) {
+                    const newProfile = {
+                        email: user.email || '',
+                        name: user.displayName || '',
+                        pan: '',
+                        phone: '',
+                        address: '',
+                    };
+                    await setDoc(userDocRef, newProfile);
+                    setProfile(newProfile);
+                }
             }
         } catch (error) {
             console.error("Error fetching profile:", error);
@@ -80,7 +79,10 @@ const ProfilePage = () => {
     };
 
     const handleSave = async () => {
-        if (!user || !profile) return;
+        if (!user || !profile || user.isAnonymous) {
+            toast({ title: 'Error', description: 'Cannot save profile for anonymous user.', variant: 'destructive' });
+            return;
+        };
         setIsSaving(true);
         try {
             const userDocRef = doc(db, 'users', user.uid);
@@ -110,7 +112,7 @@ const ProfilePage = () => {
     if (isLoading) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-background">
-                <Loader className="h-12 w-12 animate-spin text-primary" />
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
             </div>
         );
     }
@@ -119,11 +121,11 @@ const ProfilePage = () => {
         return (
              <div className="flex items-center justify-center min-h-screen bg-background text-center">
                 <div>
-                    <p className="text-lg text-destructive">Could not load profile.</p>
-                    <Link href="/">
-                        <Button variant="outline" className="mt-4">
-                            <ArrowLeft className="mr-2 h-4 w-4" /> Go Back Home
-                        </Button>
+                    <p className="text-lg text-red-500">Could not load profile. You might be logged in as an anonymous user.</p>
+                    <Link href="/login">
+                       <button className="mt-4 inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800">
+                          <ArrowLeftIcon /> Go to Login
+                        </button>
                     </Link>
                 </div>
             </div>
@@ -133,63 +135,60 @@ const ProfilePage = () => {
     return (
         <div className="container mx-auto max-w-3xl py-12 px-4">
              <div className="mb-8">
-                <Link href="/">
-                    <Button variant="outline">
-                        <ArrowLeft className="mr-2 h-4 w-4" /> Back to Dashboard
-                    </Button>
+                <Link href="/" className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800">
+                    <ArrowLeftIcon /> Back to Dashboard
                 </Link>
             </div>
-            <Card>
-                <CardHeader>
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md">
+                <div className="p-6">
                     <div className="flex items-center gap-4">
-                        <User className="h-10 w-10 text-primary" />
+                        <UserIcon />
                         <div>
-                            <CardTitle className="text-3xl font-headline">My Profile</CardTitle>
-                            <CardDescription>View and manage your personal information.</CardDescription>
+                            <h1 className="text-3xl font-bold">My Profile</h1>
+                            <p className="text-gray-500 dark:text-gray-400">View and manage your personal information.</p>
                         </div>
                     </div>
-                </CardHeader>
-                <CardContent className="space-y-6">
+                </div>
+                <div className="p-6 space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-2">
-                            <Label htmlFor="name">Full Name</Label>
-                            <Input id="name" name="name" value={profile.name} onChange={handleChange} disabled={!isEditing || isSaving} />
+                            <label htmlFor="name" className="block text-sm font-medium">Full Name</label>
+                            <input id="name" name="name" value={profile.name} onChange={handleChange} disabled={!isEditing || isSaving} className="w-full px-3 py-2 border rounded-md" />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="email">Email Address</Label>
-                            <Input id="email" name="email" value={profile.email} disabled />
-                             <p className="text-xs text-muted-foreground">Email cannot be changed.</p>
+                            <label htmlFor="email" className="block text-sm font-medium">Email Address</label>
+                            <input id="email" name="email" value={profile.email} disabled className="w-full px-3 py-2 border rounded-md bg-gray-100 dark:bg-gray-700" />
+                             <p className="text-xs text-gray-400">Email cannot be changed.</p>
                         </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-2">
-                            <Label htmlFor="pan">PAN Card</Label>
-                            <Input id="pan" name="pan" value={profile.pan} onChange={handleChange} disabled={!isEditing || isSaving} />
+                            <label htmlFor="pan" className="block text-sm font-medium">PAN Card</label>
+                            <input id="pan" name="pan" value={profile.pan} onChange={handleChange} disabled={!isEditing || isSaving} className="w-full px-3 py-2 border rounded-md" />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="phone">Phone Number</Label>
-                            <Input id="phone" name="phone" value={profile.phone} onChange={handleChange} disabled={!isEditing || isSaving} />
+                            <label htmlFor="phone" className="block text-sm font-medium">Phone Number</label>
+                            <input id="phone" name="phone" value={profile.phone} onChange={handleChange} disabled={!isEditing || isSaving} className="w-full px-3 py-2 border rounded-md" />
                         </div>
                     </div>
                      <div className="space-y-2">
-                        <Label htmlFor="address">Address</Label>
-                        <Textarea id="address" name="address" value={profile.address} onChange={handleChange} disabled={!isEditing || isSaving} />
+                        <label htmlFor="address" className="block text-sm font-medium">Address</label>
+                        <textarea id="address" name="address" value={profile.address} onChange={handleChange} disabled={!isEditing || isSaving} className="w-full px-3 py-2 border rounded-md" />
                     </div>
-                </CardContent>
-                <CardFooter className="flex justify-end gap-2">
+                </div>
+                <div className="p-6 flex justify-end gap-2">
                     {isEditing ? (
                         <>
-                            <Button variant="ghost" onClick={() => { setIsEditing(false); fetchProfile(); }} disabled={isSaving}>Cancel</Button>
-                            <Button onClick={handleSave} disabled={isSaving}>
-                                {isSaving && <Loader className="mr-2 h-4 w-4 animate-spin" />}
+                            <button className="px-4 py-2 border rounded-md" onClick={() => { setIsEditing(false); fetchProfile(); }} disabled={isSaving}>Cancel</button>
+                            <button onClick={handleSave} disabled={isSaving} className="px-4 py-2 bg-blue-600 text-white font-bold rounded-md hover:bg-blue-700 disabled:bg-gray-400">
                                 {isSaving ? 'Saving...' : 'Save Changes'}
-                            </Button>
+                            </button>
                         </>
                     ) : (
-                        <Button onClick={() => setIsEditing(true)}>Edit Profile</Button>
+                        <button onClick={() => setIsEditing(true)} className="px-4 py-2 bg-blue-600 text-white font-bold rounded-md hover:bg-blue-700">Edit Profile</button>
                     )}
-                </CardFooter>
-            </Card>
+                </div>
+            </div>
         </div>
     );
 };
