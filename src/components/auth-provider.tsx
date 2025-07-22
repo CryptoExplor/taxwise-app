@@ -26,15 +26,11 @@ const AuthContext = createContext<AuthContextType>({ user: null, userProfile: nu
 
 const publicRoutes = ['/login', '/pricing', '/contact', '/calculator'];
 
-const isProtectedRoute = (pathname: string) => {
-    if (publicRoutes.includes(pathname)) {
-        return false;
-    }
-    // Handle dynamic routes or catch-all protected routes if needed
-    // e.g. if (pathname.startsWith('/admin')) return true;
-    return true; // Default to protected
+// This function checks if a given pathname is a protected route.
+const isProtectedRoute = (pathname: string | null) => {
+    if (!pathname) return true; // Assume protected if pathname isn't available yet
+    return !publicRoutes.includes(pathname);
 }
-
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -62,7 +58,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
   
   useEffect(() => {
-    if (loading) return;
+    if (loading) return; // Don't do anything until the auth state is resolved
 
     const protectedRoute = isProtectedRoute(pathname);
     
@@ -75,7 +71,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   }, [user, loading, pathname, router]);
 
-  if (loading && isProtectedRoute(pathname)) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="text-center">
@@ -84,6 +80,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         </div>
       </div>
     );
+  }
+
+  // If not loading and trying to access a protected route without being logged in,
+  // we return null to prevent a flash of content before redirection.
+  if (!user && isProtectedRoute(pathname)) {
+    return null;
   }
 
   return (
