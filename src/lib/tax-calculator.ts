@@ -58,7 +58,8 @@ export function computeTax(
         });
       }
       prevLimit = slab.limit;
-      if (taxableIncome <= slab.limit) break;
+    } else {
+        break;
     }
   }
 
@@ -112,3 +113,5 @@ export function calculateAge(dobStr: string) {
   }
   return age;
 }
+
+    

@@ -12,7 +12,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { computeTax } from '@/lib/tax-calculator';
 import { formatCurrency } from '@/lib/utils';
-import { ArrowLeft, Calculator as CalculatorIcon, ReceiptText, Landmark, Scale, FileDown, TrendingUp, BookOpen } from 'lucide-react';
+import { ArrowLeft, Calculator as CalculatorIcon, ReceiptText, Landmark, Scale, FileDown, BookOpen } from 'lucide-react';
 import Link from 'next/link';
 import { Separator } from '@/components/ui/separator';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from "recharts";
@@ -313,7 +313,7 @@ export default function TaxCalculatorPage() {
                                         <Separator />
                                         <SummaryItem label="Tax before Cess" value={mainResult.computation.taxBeforeCess} />
                                          <Separator />
-                                        <SummaryItem label="Rebate u/s 87A" value={mainResult.computation.rebate} />
+                                        <SummaryItem label="Rebate u/s 87A" value={-mainResult.computation.rebate} />
                                         <Separator />
                                         <SummaryItem label="Health & Education Cess (4%)" value={mainResult.computation.cess} />
                                     </div>
