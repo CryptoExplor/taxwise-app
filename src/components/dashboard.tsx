@@ -3,7 +3,7 @@
 
 import { useState, useRef, useTransition, useEffect } from "react";
 import { collection, addDoc, onSnapshot, query, orderBy, updateDoc, doc } from "firebase/firestore";
-import { UploadCloud, Loader, Download, Sparkles, BarChart, FileText } from "lucide-react";
+import { UploadCloud, Loader, Download, Sparkles, BarChart, FileText, PlusCircle } from "lucide-react";
 import type { ClientData } from "@/lib/types";
 import { parseITR } from "@/lib/itr-parser";
 import { ClientCard } from "./client-card";
@@ -14,6 +14,8 @@ import { getTaxAnalysis, TaxAnalysisOutput } from "@/ai/flows/tax-analysis-flow"
 import { useAuth } from "./auth-provider";
 import { db } from "@/lib/firebase";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { computeTax } from "@/lib/tax-calculator";
+import { v4 as uuidv4 } from 'uuid';
 
 export function Dashboard() {
   const { user, userProfile } = useAuth();
@@ -39,7 +41,7 @@ export function Dashboard() {
         id: doc.id,
         ...doc.data()
       })) as ClientData[];
-      setClients(clientsData);
+      setClients(clientsData.filter(c => c.id)); // Filter out any temporary clients
       setIsInitialLoading(false);
     }, (error) => {
       console.error("Error fetching clients:", error);
@@ -123,22 +125,64 @@ export function Dashboard() {
   const handleUploadClick = () => {
     fileInputRef.current?.click();
   };
+
+  const handleNewManualComputation = () => {
+      const emptyTaxComputation = computeTax(0, 30, 'New', '2024-25', {
+          salary: 0, houseProperty: 0, businessIncome: 0,
+          capitalGains: { shortTerm: 0, longTerm: 0 },
+          otherSources: 0, grossTotalIncome: 0
+      }, 0);
+      
+      const newClient: ClientData = {
+          id: `temp-${uuidv4()}`, // Temporary ID
+          fileName: "Manual Entry",
+          createdAt: new Date() as any, // Will be replaced by server timestamp on save
+          personalInfo: {
+              name: "New Manual Client",
+              pan: "ABCDE1234F",
+              assessmentYear: "2024-25",
+              age: 30,
+              itrForm: 'Manual'
+          },
+          incomeDetails: { salary: 0, houseProperty: 0, businessIncome: 0, capitalGains: { shortTerm: 0, longTerm: 0 }, otherSources: 0, grossTotalIncome: 0 },
+          deductions: { section80C: 0, section80D: 0, totalDeductions: 0 },
+          taxesPaid: { tds: 0, selfAssessmentTax: 0, advanceTax: 0, totalTaxPaid: 0 },
+          taxRegime: 'New',
+          taxComputation: { ...emptyTaxComputation, netTaxPayable: 0, refund: 0 },
+          taxComparison: { oldRegime: emptyTaxComputation, newRegime: emptyTaxComputation },
+          aiSummary: 'Enter details to get insights.',
+          aiTips: []
+      };
+      
+      setClients(prev => [newClient, ...prev]);
+  };
   
   const handleClientDelete = (clientId: string) => {
     setClients(prevClients => prevClients.filter(client => client.id !== clientId));
   };
   
+  const handleClientSave = (savedClient: ClientData) => {
+    setClients(prevClients => prevClients.map(c => c.id === savedClient.id ? savedClient : c));
+  }
+
+
   const UploadArea = () => (
     <div className="text-center flex flex-col items-center justify-center min-h-[40vh] bg-background rounded-lg border-2 border-dashed border-border p-8">
         <UploadCloud className="w-16 h-16 mb-4 text-accent" />
         <h2 className="text-3xl font-headline font-bold mt-4 mb-2">Upload your ITR JSON</h2>
         <p className="text-muted-foreground max-w-md mb-6">
-          Get an instant summary of your tax return, plus AI-powered insights. Secure, private, and fast.
+          Or start a new manual computation to plan your taxes for the upcoming year.
         </p>
-        <Button size="lg" onClick={handleUploadClick} disabled={isProcessing}>
-          <UploadCloud className="mr-2 h-5 w-5" />
-          {isProcessing ? "Processing..." : "Select Files"}
-        </Button>
+        <div className="flex gap-4">
+            <Button size="lg" onClick={handleUploadClick} disabled={isProcessing}>
+                <UploadCloud className="mr-2 h-5 w-5" />
+                {isProcessing ? "Processing..." : "Select Files"}
+            </Button>
+            <Button size="lg" variant="outline" onClick={handleNewManualComputation} disabled={isProcessing}>
+                <PlusCircle className="mr-2 h-5 w-5" />
+                Manual Computation
+            </Button>
+        </div>
     </div>
   );
 
@@ -165,14 +209,14 @@ export function Dashboard() {
             <Sparkles className="w-8 h-8 text-accent" />
             <div>
               <h2 className="text-3xl font-headline font-bold">Welcome, {userProfile?.name || user?.email}</h2>
-              <p className="text-muted-foreground">You have {clients.length} client{clients.length !== 1 ? 's' : ''} saved.</p>
+              <p className="text-muted-foreground">You have {clients.filter(c=>!c.id.startsWith('temp')).length} client{clients.length !== 1 ? 's' : ''} saved.</p>
             </div>
           </div>
           {clients.length > 0 && (
             <div className="flex gap-2">
-              <Button onClick={handleUploadClick} disabled={isProcessing}>
-                  <UploadCloud className="mr-2 h-4 w-4" />
-                  Upload More
+              <Button onClick={handleNewManualComputation} disabled={isProcessing}>
+                  <PlusCircle className="mr-2 h-4 w-4" />
+                  New Computation
               </Button>
               <Button variant="outline" onClick={() => exportClientsToCSV(clients)} disabled={clients.length === 0 || isProcessing}>
                   <Download className="mr-2 h-4 w-4" />
@@ -193,7 +237,7 @@ export function Dashboard() {
       {clients.length > 0 && (
         <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
           {clients.map((client) => (
-            <ClientCard key={client.id} client={client} onDelete={handleClientDelete} />
+            <ClientCard key={client.id} client={client} onDelete={handleClientDelete} onSave={handleClientSave} />
           ))}
           
           <Card className="lg:col-span-2">
@@ -206,13 +250,13 @@ export function Dashboard() {
               <CardContent>
                   <ul className="list-disc pl-5 space-y-3 text-muted-foreground">
                       <li>
-                          <span className="font-semibold text-foreground">{clients.length}</span> Clients added
+                          <span className="font-semibold text-foreground">{clients.filter(c=>!c.id.startsWith('temp')).length}</span> Clients added
                       </li>
                       <li className="capitalize">
                           Current Plan: <span className="font-semibold text-foreground">{userProfile?.plan || 'Free'}</span>
                       </li>
                        <li>
-                          <span className="font-semibold text-foreground">{clients.length}</span> Reports generated
+                          <span className="font-semibold text-foreground">{clients.filter(c=>!c.id.startsWith('temp')).length}</span> Reports generated
                       </li>
                   </ul>
               </CardContent>

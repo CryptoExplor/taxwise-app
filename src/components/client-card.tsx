@@ -30,7 +30,7 @@ import { useState, useTransition, useEffect, useMemo } from "react";
 import { useAuth } from "./auth-provider";
 import { useToast } from "@/hooks/use-toast";
 import { getTaxAnalysis } from "@/ai/flows/tax-analysis-flow";
-import { doc, updateDoc, deleteDoc } from "firebase/firestore";
+import { doc, updateDoc, deleteDoc, addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Input } from "./ui/input";
 import { computeTax } from "@/lib/tax-calculator";
@@ -60,6 +60,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, Cart
 interface ClientCardProps {
   client: ClientData;
   onDelete: (id: string) => void;
+  onSave: (client: ClientData) => void;
 }
 
 const ComputationRow = ({
@@ -115,22 +116,24 @@ const ComputationRow = ({
 };
 
 
-export function ClientCard({ client, onDelete }: ClientCardProps) {
+export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
   const { user, userProfile } = useAuth();
   const { toast } = useToast();
-
-  const [isEditing, setIsEditing] = useState(false);
+  
+  const isNewClient = client.id.startsWith('temp-');
+  const [isEditing, setIsEditing] = useState(isNewClient);
   const [editableData, setEditableData] = useState<ClientData>(client);
   const [displayRegime, setDisplayRegime] = useState<'Old' | 'New'>(client.taxRegime);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     // When editing is toggled, or client data changes, reset state
-    if (!isEditing) {
+    if (!isEditing && !isNewClient) {
       setEditableData(client);
     }
     setDisplayRegime(client.taxRegime);
-  }, [client, isEditing]);
+  }, [client, isEditing, isNewClient]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, path: string) => {
     const { value } = e.target;
@@ -203,36 +206,42 @@ export function ClientCard({ client, onDelete }: ClientCardProps) {
 
   const handleSave = async () => {
     if (!user) return;
+    setIsSaving(true);
+    
+    const { id, createdAt, ...dataToSave } = editableData;
+
     try {
-      const dataToSave: ClientDataToSave = {
-        fileName: editableData.fileName,
-        createdAt: new Date(), // Always set a fresh date on save or use the original one
-        personalInfo: editableData.personalInfo,
-        incomeDetails: editableData.incomeDetails,
-        deductions: editableData.deductions,
-        taxesPaid: editableData.taxesPaid,
-        taxComputation: editableData.taxComputation,
-        taxRegime: displayRegime,
-        taxComparison: editableData.taxComparison,
-        aiSummary: editableData.aiSummary,
-        aiTips: editableData.aiTips,
-      };
-
-      const docRef = doc(db, `users/${user.uid}/clients`, editableData.id);
-      await updateDoc(docRef, dataToSave);
-
-      toast({ title: "Success", description: "Client data updated successfully." });
-      setIsEditing(false);
+      if (isNewClient) {
+        // Add new document
+        const clientsCollectionRef = collection(db, `users/${user.uid}/clients`);
+        const docRef = await addDoc(clientsCollectionRef, { ...dataToSave, createdAt: serverTimestamp() });
+        toast({ title: "Success", description: "Client data saved successfully." });
+        onSave({ ...editableData, id: docRef.id }); // Notify parent with the new ID
+        setIsEditing(false); // Exit edit mode after saving
+      } else {
+        // Update existing document
+        const docRef = doc(db, `users/${user.uid}/clients`, id);
+        await updateDoc(docRef, dataToSave);
+        toast({ title: "Success", description: "Client data updated successfully." });
+        onSave(editableData);
+        setIsEditing(false);
+      }
     } catch (error) {
       console.error("Error saving client data:", error);
-      toast({ variant: "destructive", title: "Save Failed", description: "Could not update client data." });
+      toast({ variant: "destructive", title: "Save Failed", description: "Could not save client data." });
+    } finally {
+        setIsSaving(false);
     }
   };
 
   const handleCancel = () => {
-      setIsEditing(false);
-      setEditableData(client);
-      setDisplayRegime(client.taxRegime);
+      if (isNewClient) {
+          onDelete(client.id); // Remove temporary client from dashboard
+      } else {
+          setIsEditing(false);
+          setEditableData(client);
+          setDisplayRegime(client.taxRegime);
+      }
   };
   
   const handleExport = async () => {
@@ -242,7 +251,11 @@ export function ClientCard({ client, onDelete }: ClientCardProps) {
   };
 
   const handleDelete = async () => {
-    if (!user) return;
+    if (!user || isNewClient) {
+        onDelete(client.id);
+        toast({ title: "Client Removed", description: `The new entry has been discarded.` });
+        return;
+    };
     setIsDeleting(true);
     try {
         await deleteDoc(doc(db, `users/${user.uid}/clients`, client.id));
@@ -424,8 +437,11 @@ export function ClientCard({ client, onDelete }: ClientCardProps) {
             <div className="flex gap-2">
                 {isEditing ? (
                     <>
-                        <Button variant="ghost" onClick={handleCancel}><XCircle /> Cancel</Button>
-                        <Button onClick={handleSave}><Save /> Save Changes</Button>
+                        <Button variant="ghost" onClick={handleCancel} disabled={isSaving}><XCircle /> Cancel</Button>
+                        <Button onClick={handleSave} disabled={isSaving}>
+                           {isSaving && <Loader className="animate-spin mr-2" />}
+                           {isSaving ? 'Saving...' : 'Save Changes'}
+                        </Button>
                     </>
                 ) : (
                     <Button variant="outline" onClick={() => setIsEditing(true)}><Edit /> Edit Data</Button>
