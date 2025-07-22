@@ -67,16 +67,15 @@ export const taxRules = {
       presumptiveAllowed: true,
     },
     new: {
-      slabs: [
-        { limit: 250000, rate: 0 },
-        { limit: 500000, rate: 0.05 },
-        { limit: 750000, rate: 0.1 },
-        { limit: 1000000, rate: 0.15 },
-        { limit: 1250000, rate: 0.2 },
-        { limit: 1500000, rate: 0.25 },
-        { limit: Infinity, rate: 0.3 },
+       slabs: [
+        { limit: 300000, rate: 0 },
+        { limit: 600000, rate: 0.05 },
+        { limit: 900000, rate: 0.1 },
+        { limit: 1200000, rate: 0.15 },
+        { limit: 1500000, rate: 0.2 },
+        { limit: Infinity, rate: 0.3 }
       ],
-      rebate87A: { limit: 500000, maxRebate: 12500 },
+      rebate87A: { limit: 700000, maxRebate: 25000 },
       cessRate: 0.04,
       presumptiveAllowed: true,
     },
@@ -193,5 +192,3 @@ export const taxRules = {
     },
   },
 };
-
-    

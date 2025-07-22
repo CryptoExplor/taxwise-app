@@ -113,5 +113,3 @@ export function calculateAge(dobStr: string) {
   }
   return age;
 }
-
-    
