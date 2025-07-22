@@ -32,6 +32,7 @@ export interface Deductions {
 
 export interface TaxesPaid {
   tds: number;
+  selfAssessmentTax: number;
   advanceTax: number;
   totalTaxPaid: number;
 }
@@ -45,12 +46,16 @@ export interface TaxSlab {
 
 export interface TaxComputationResult {
   taxableIncome: number;
+  taxableIncomeNormal: number; // Taxable income excluding special rate items
+  taxOnNormalIncome: number;
+  taxOnLTCG: number;
+  taxOnSTCG: number;
   taxBeforeCess: number;
   rebate: number;
   taxAfterRebate: number;
   cess: number;
   totalTaxLiability: number;
-  slabBreakdown?: TaxSlab[]; // Optional because it might not exist on old data
+  slabBreakdown?: TaxSlab[];
 }
 
 export interface TaxComputation extends TaxComputationResult {

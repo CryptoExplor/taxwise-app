@@ -119,36 +119,28 @@ export async function parseITR(file: File): Promise<ClientDataToSave> {
     
     const taxRegime = getFromPaths(jsonData, ['FilingStatus.NewTaxRegime'], 'N') === 'Y' ? 'New' : 'Old';
     
-    // --- START of new calculation logic ---
-
-    // Calculate for both regimes
     const standardDeduction = incomeDetails.salary > 0 ? 50000 : 0;
     const oldRegimeTaxableIncome = Math.max(0, incomeDetails.grossTotalIncome - deductions.totalDeductions - standardDeduction);
-    const newRegimeTaxableIncome = Math.max(0, incomeDetails.grossTotalIncome - standardDeduction); // New regime gets standard deduction
+    const newRegimeTaxableIncome = Math.max(0, incomeDetails.grossTotalIncome - standardDeduction);
 
-    const oldRegimeResult = computeTax(oldRegimeTaxableIncome, personalInfo.age, 'Old', personalInfo.assessmentYear);
-    const newRegimeResult = computeTax(newRegimeTaxableIncome, personalInfo.age, 'New', personalInfo.assessmentYear);
+    const oldRegimeResult = computeTax(oldRegimeTaxableIncome, personalInfo.age, 'Old', personalInfo.assessmentYear, incomeDetails, deductions.totalDeductions);
+    const newRegimeResult = computeTax(newRegimeTaxableIncome, personalInfo.age, 'New', personalInfo.assessmentYear, incomeDetails, 0);
     
     const taxComparison = {
       oldRegime: oldRegimeResult,
       newRegime: newRegimeResult,
     };
 
-    // Determine the primary computation result based on the file's tax regime
     const taxComputationResult = taxRegime === 'Old' ? oldRegimeResult : newRegimeResult;
     const taxableIncome = taxRegime === 'Old' ? oldRegimeTaxableIncome : newRegimeTaxableIncome;
 
-    // --- END of new calculation logic ---
-
     const taxesPaid = {
-      tds: get(jsonData, 'TaxPayments.TDS', 0),
-      advanceTax: get(jsonData, 'TaxPayments.AdvanceTax', 0),
+      tds: getFromPaths(jsonData, ['TaxPayments.TDS'], (get(jsonData, 'TDSonSalaries.TotalTDSonSalaries', 0) + get(jsonData, 'TDSonOthThanSals.TotalTDSonOthThanSals', 0))),
+      advanceTax: getFromPaths(jsonData, ['TaxPayments.AdvanceTax'], get(jsonData, 'TaxPaid.TaxesPaid.AdvanceTax', 0)),
+      selfAssessmentTax: getFromPaths(jsonData, ['TaxPayments.SelfAssessmentTax'], get(jsonData, 'TaxPaid.TaxesPaid.SelfAssessmentTax', 0)),
     };
-    taxesPaid.tds = getFromPaths(jsonData, ['TaxPayments.TDS'], (get(jsonData, 'TDSonSalaries.TotalTDSonSalaries', 0) + get(jsonData, 'TDSonOthThanSals.TotalTDSonOthThanSals', 0)));
-    taxesPaid.advanceTax = getFromPaths(jsonData, ['TaxPayments.AdvanceTax'], get(jsonData, 'TaxPaid.TaxesPaid.AdvanceTax', 0));
     
-    const totalTaxPaid = getFromPaths(jsonData, ['TaxPayments.TotalTaxesPaid'], taxesPaid.tds + taxesPaid.advanceTax + get(jsonData, 'TaxPaid.TaxesPaid.SelfAssessmentTax', 0));
-
+    const totalTaxPaid = getFromPaths(jsonData, ['TaxPayments.TotalTaxesPaid'], taxesPaid.tds + taxesPaid.advanceTax + taxesPaid.selfAssessmentTax);
 
     const finalAmount = taxComputationResult.totalTaxLiability - totalTaxPaid;
 

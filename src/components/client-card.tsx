@@ -164,8 +164,6 @@ export function ClientCard({ client, onDelete }: ClientCardProps) {
         (data.incomeDetails.interestIncomeSaving || 0) +
         (data.incomeDetails.dividendIncome || 0) +
         data.incomeDetails.otherSources;
-
-    const standardDeduction = data.incomeDetails.salary > 0 ? Math.min(data.incomeDetails.salary, 50000) : 0;
     
     // Recalculate Total Deductions
     data.deductions.totalDeductions = 
@@ -178,19 +176,21 @@ export function ClientCard({ client, onDelete }: ClientCardProps) {
         (data.deductions.section80TTA || 0) +
         (data.deductions.section80TTB || 0);
 
+    const standardDeduction = data.incomeDetails.salary > 0 ? Math.min(data.incomeDetails.salary, 50000) : 0;
+    
     // Recompute taxes for both regimes for comparison
     const oldRegimeTaxableIncome = Math.max(0, data.incomeDetails.grossTotalIncome - data.deductions.totalDeductions - standardDeduction);
     const newRegimeTaxableIncome = Math.max(0, data.incomeDetails.grossTotalIncome - standardDeduction);
     
-    const oldRegimeResult = computeTax(oldRegimeTaxableIncome, data.personalInfo.age, 'Old', data.personalInfo.assessmentYear);
-    const newRegimeResult = computeTax(newRegimeTaxableIncome, data.personalInfo.age, 'New', data.personalInfo.assessmentYear);
+    const oldRegimeResult = computeTax(oldRegimeTaxableIncome, data.personalInfo.age, 'Old', data.personalInfo.assessmentYear, data.incomeDetails, data.deductions.totalDeductions);
+    const newRegimeResult = computeTax(newRegimeTaxableIncome, data.personalInfo.age, 'New', data.personalInfo.assessmentYear, data.incomeDetails, 0);
     
     // Set the main computation based on the original regime
     const taxComputationResult = data.taxRegime === 'Old' ? oldRegimeResult : newRegimeResult;
     const taxableIncome = data.taxRegime === 'Old' ? oldRegimeTaxableIncome : newRegimeTaxableIncome;
     
     // Recalculate total tax paid
-    data.taxesPaid.totalTaxPaid = data.taxesPaid.tds; // Add TCS, self-assessment etc. here
+    data.taxesPaid.totalTaxPaid = data.taxesPaid.tds + data.taxesPaid.selfAssessmentTax;
 
     const finalAmount = taxComputationResult.totalTaxLiability - data.taxesPaid.totalTaxPaid;
     
@@ -204,14 +204,22 @@ export function ClientCard({ client, onDelete }: ClientCardProps) {
   const handleSave = async () => {
     if (!user) return;
     try {
-      // Create a plain object for Firestore by removing non-serializable fields
-      const { id, createdAt, ...dataToSave } = editableData;
-      
-      const plainData = JSON.parse(JSON.stringify(dataToSave));
-      plainData.taxRegime = displayRegime;
+      const dataToSave: ClientDataToSave = {
+        fileName: editableData.fileName,
+        createdAt: new Date(), // Always set a fresh date on save or use the original one
+        personalInfo: editableData.personalInfo,
+        incomeDetails: editableData.incomeDetails,
+        deductions: editableData.deductions,
+        taxesPaid: editableData.taxesPaid,
+        taxComputation: editableData.taxComputation,
+        taxRegime: displayRegime,
+        taxComparison: editableData.taxComparison,
+        aiSummary: editableData.aiSummary,
+        aiTips: editableData.aiTips,
+      };
 
-      const docRef = doc(db, `users/${user.uid}/clients`, id);
-      await updateDoc(docRef, plainData);
+      const docRef = doc(db, `users/${user.uid}/clients`, editableData.id);
+      await updateDoc(docRef, dataToSave);
 
       toast({ title: "Success", description: "Client data updated successfully." });
       setIsEditing(false);
@@ -362,6 +370,9 @@ export function ClientCard({ client, onDelete }: ClientCardProps) {
                         {computationToShow.slabBreakdown?.map((slab, i) => (
                             <ComputationRow key={i} label={`On ${formatCurrency(slab.amount)} @ ${slab.rate}%`} value={slab.tax} isSubItem={true} />
                         ))}
+                        <ComputationRow label="Short Term Capital Gain @ 15%" value={computationToShow.taxOnSTCG} isSubItem={true} />
+                        <ComputationRow label="Long Term Capital Gain @ 10%" value={computationToShow.taxOnLTCG} isSubItem={true} />
+                        
                         <ComputationRow label="Total Tax" value={computationToShow.taxBeforeCess} isBold={true} />
                         <ComputationRow label="Less: Rebate u/s 87A" value={-computationToShow.rebate} />
                         <ComputationRow label="Add: Education Cess (4%)" value={computationToShow.cess} />
@@ -369,6 +380,7 @@ export function ClientCard({ client, onDelete }: ClientCardProps) {
 
                         {/* --- TDS Section --- */}
                         <ComputationRow label="Less: T.D.S." value={-editableData.taxesPaid.tds} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'taxesPaid.tds')} />
+                        <ComputationRow label="Less: Self Assessment Tax" value={-(editableData.taxesPaid.selfAssessmentTax || 0)} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'taxesPaid.selfAssessmentTax')} />
 
                         {/* --- Final Amount --- */}
                          <ComputationRow 
