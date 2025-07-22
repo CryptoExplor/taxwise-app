@@ -1,4 +1,5 @@
-import type { TaxComputationResult } from './types';
+
+import type { TaxComputationResult, TaxSlab } from './types';
 import { taxRules } from '../config/tax-rules';
 
 // Note: This is a simplified tax calculator.
@@ -12,6 +13,7 @@ export function computeTax(
 ): TaxComputationResult {
   let taxBeforeCess = 0;
   let rebate = 0;
+  const slabBreakdown: TaxSlab[] = [];
   
   let ruleKey;
   if (regime === "New") {
@@ -44,7 +46,14 @@ export function computeTax(
     if (taxableIncome > prevLimit) {
       const taxableInSlab = Math.min(taxableIncome, slab.limit) - prevLimit;
       if (taxableInSlab > 0) {
-        taxBeforeCess += taxableInSlab * slab.rate;
+        const taxInSlab = taxableInSlab * slab.rate;
+        taxBeforeCess += taxInSlab;
+        slabBreakdown.push({
+            range: `₹${prevLimit.toLocaleString('en-IN')} - ₹${slab.limit === Infinity ? 'Above' : slab.limit.toLocaleString('en-IN')}`,
+            amount: taxableInSlab,
+            rate: slab.rate * 100,
+            tax: taxInSlab
+        });
       }
       prevLimit = slab.limit;
       if (taxableIncome <= slab.limit) break;
@@ -69,6 +78,7 @@ export function computeTax(
     taxAfterRebate,
     cess,
     totalTaxLiability,
+    slabBreakdown, // Return the detailed breakdown
   };
 }
 

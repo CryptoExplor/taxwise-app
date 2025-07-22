@@ -12,10 +12,12 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { computeTax } from '@/lib/tax-calculator';
 import { formatCurrency } from '@/lib/utils';
-import { ArrowLeft, Calculator as CalculatorIcon, ReceiptText, Landmark, Scale } from 'lucide-react';
+import { ArrowLeft, Calculator as CalculatorIcon, ReceiptText, Landmark, Scale, FileDown } from 'lucide-react';
 import Link from 'next/link';
 import { Separator } from '@/components/ui/separator';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from "recharts";
+import type { TaxComputationResult, TaxSlab } from '@/lib/types';
+import { generateCalculatorPDF } from '@/lib/pdf-exporter';
 
 
 const calculatorSchema = z.object({
@@ -35,22 +37,23 @@ const calculatorSchema = z.object({
 
 type CalculatorFormValues = z.infer<typeof calculatorSchema>;
 
-interface TaxResult {
-    netTaxableIncome: number;
-    taxLiability: number;
-    cess: number;
-    totalPayable: number;
+interface CalculationResult {
+    taxableIncome: number;
     regime: 'Old' | 'New';
+    computation: TaxComputationResult;
 }
 
 interface ComparisonResult {
-    oldRegimeTax: number;
-    newRegimeTax: number;
+    oldRegime: TaxComputationResult;
+    newRegime: TaxComputationResult;
 }
 
 export default function TaxCalculatorPage() {
-    const [taxResult, setTaxResult] = useState<TaxResult | null>(null);
+    const [mainResult, setMainResult] = useState<CalculationResult | null>(null);
     const [comparisonResult, setComparisonResult] = useState<ComparisonResult | null>(null);
+    const [isExporting, setIsExporting] = useState(false);
+    const [formData, setFormData] = useState<CalculatorFormValues | null>(null);
+
 
     const { control, handleSubmit, watch, formState: { errors } } = useForm<CalculatorFormValues>({
         resolver: zodResolver(calculatorSchema),
@@ -65,34 +68,47 @@ export default function TaxCalculatorPage() {
     const taxRegime = watch('taxRegime');
 
     const onSubmit = (data: CalculatorFormValues) => {
-        // Main calculation for selected regime
-        const taxableIncome = data.taxRegime === 'Old' 
-            ? Math.max(0, data.grossTotalIncome - data.totalDeductions) 
-            : data.grossTotalIncome;
-
-        const result = computeTax(taxableIncome, data.age, data.taxRegime, '2024-25');
+        setFormData(data);
+        const taxableIncomeOld = Math.max(0, data.grossTotalIncome - data.totalDeductions);
+        const taxableIncomeNew = data.grossTotalIncome;
         
-        setTaxResult({
-            netTaxableIncome: taxableIncome,
-            taxLiability: result.taxBeforeCess,
-            cess: result.cess,
-            totalPayable: result.totalTaxLiability,
-            regime: data.taxRegime,
-        });
-
-        // Comparison calculation
-        const oldRegimeTaxableIncome = Math.max(0, data.grossTotalIncome - data.totalDeductions);
-        const oldRegimeResult = computeTax(oldRegimeTaxableIncome, data.age, 'Old', '2024-25');
-        
-        const newRegimeTaxableIncome = data.grossTotalIncome;
-        const newRegimeResult = computeTax(newRegimeTaxableIncome, data.age, 'New', '2024-25');
+        const oldRegimeResult = computeTax(taxableIncomeOld, data.age, 'Old', '2024-25');
+        const newRegimeResult = computeTax(taxableIncomeNew, data.age, 'New', '2024-25');
 
         setComparisonResult({
-            oldRegimeTax: oldRegimeResult.totalTaxLiability,
-            newRegimeTax: newRegimeResult.totalTaxLiability,
+            oldRegime: oldRegimeResult,
+            newRegime: newRegimeResult,
         });
+
+        if (data.taxRegime === 'Old') {
+            setMainResult({
+                taxableIncome: taxableIncomeOld,
+                computation: oldRegimeResult,
+                regime: 'Old'
+            });
+        } else {
+            setMainResult({
+                taxableIncome: taxableIncomeNew,
+                computation: newRegimeResult,
+                regime: 'New'
+            });
+        }
     };
     
+    const handleExport = async () => {
+        if (!formData || !comparisonResult) return;
+        setIsExporting(true);
+        await generateCalculatorPDF({
+            ...formData,
+            assessmentYear: '2024-25',
+            comparisonResult: {
+                oldRegimeTax: comparisonResult.oldRegime.totalTaxLiability,
+                newRegimeTax: comparisonResult.newRegime.totalTaxLiability,
+            },
+        });
+        setIsExporting(false);
+    };
+
     const SummaryItem = ({ label, value }: { label: string; value: string | number }) => (
         <div className="flex justify-between items-center text-sm py-2">
             <p className="text-muted-foreground">{label}</p>
@@ -101,9 +117,56 @@ export default function TaxCalculatorPage() {
     );
     
     const chartData = comparisonResult ? [
-        { name: 'Old Regime', Tax: comparisonResult.oldRegimeTax },
-        { name: 'New Regime', Tax: comparisonResult.newRegimeTax },
+        { name: 'Old Regime', Tax: comparisonResult.oldRegime.totalTaxLiability, breakdown: comparisonResult.oldRegime.slabBreakdown },
+        { name: 'New Regime', Tax: comparisonResult.newRegime.totalTaxLiability, breakdown: comparisonResult.newRegime.slabBreakdown },
     ] : [];
+    
+    const CustomTooltip = ({ active, payload, label }: any) => {
+        if (active && payload && payload.length) {
+            const data = payload[0].payload;
+            const breakdown: TaxSlab[] = data.breakdown || [];
+            return (
+                <div className="bg-background border shadow-lg rounded-lg p-4 text-sm w-80">
+                    <p className="font-bold text-lg mb-2">{label}</p>
+                    <Separator />
+                    <table className="w-full mt-2">
+                        <thead>
+                            <tr className="text-left text-muted-foreground">
+                                <th className="font-normal py-1">Slab Amount</th>
+                                <th className="font-normal py-1 text-center">Rate</th>
+                                <th className="font-normal py-1 text-right">Tax</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {breakdown.map((slab, i) => (
+                                <tr key={i}>
+                                    <td>{formatCurrency(slab.amount)}</td>
+                                    <td className="text-center">{slab.rate}%</td>
+                                    <td className="text-right">{formatCurrency(slab.tax)}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                    <Separator className="my-2"/>
+                    <div className="flex justify-between font-semibold">
+                        <span>Total Taxable</span>
+                        <span>{formatCurrency(data.breakdown.reduce((acc: number, s: TaxSlab) => acc + s.amount, 0))}</span>
+                    </div>
+                     <div className="flex justify-between font-semibold">
+                        <span>Tax Before Cess</span>
+                        <span>{formatCurrency(data.breakdown.reduce((acc: number, s: TaxSlab) => acc + s.tax, 0))}</span>
+                    </div>
+                     <Separator className="my-2"/>
+                    <div className="flex justify-between font-bold text-lg text-primary">
+                        <p>Total Payable</p>
+                        <p>{formatCurrency(data.Tax)}</p>
+                    </div>
+                </div>
+            );
+        }
+        return null;
+    };
+
 
     return (
         <div className="container mx-auto max-w-4xl py-12 px-4">
@@ -188,11 +251,11 @@ export default function TaxCalculatorPage() {
                 </Card>
 
                 <div className="space-y-8">
-                    {taxResult ? (
+                    {mainResult ? (
                         <Card className="bg-muted/30">
                             <CardHeader>
                                 <CardTitle className="font-headline text-2xl">Calculation Result</CardTitle>
-                                <CardDescription>Based on the {taxResult.regime} Tax Regime.</CardDescription>
+                                <CardDescription>Based on the {mainResult.regime} Tax Regime.</CardDescription>
                             </CardHeader>
                             <CardContent>
                                 <div className="space-y-4">
@@ -201,7 +264,7 @@ export default function TaxCalculatorPage() {
                                             <Landmark className="w-4 h-4" /> Income
                                         </h3>
                                         <Separator />
-                                        <SummaryItem label="Net Taxable Income" value={taxResult.netTaxableIncome} />
+                                        <SummaryItem label="Net Taxable Income" value={mainResult.taxableIncome} />
                                     </div>
 
                                     <div>
@@ -209,9 +272,11 @@ export default function TaxCalculatorPage() {
                                             <ReceiptText className="w-4 h-4" /> Tax
                                         </h3>
                                         <Separator />
-                                        <SummaryItem label="Tax before Cess" value={taxResult.taxLiability} />
+                                        <SummaryItem label="Tax before Cess" value={mainResult.computation.taxBeforeCess} />
+                                         <Separator />
+                                        <SummaryItem label="Rebate u/s 87A" value={mainResult.computation.rebate} />
                                         <Separator />
-                                        <SummaryItem label="Health & Education Cess (4%)" value={taxResult.cess} />
+                                        <SummaryItem label="Health & Education Cess (4%)" value={mainResult.computation.cess} />
                                     </div>
                                 </div>
                             </CardContent>
@@ -221,7 +286,7 @@ export default function TaxCalculatorPage() {
                                         Total Tax Payable
                                     </h4>
                                     <p className="font-bold text-xl text-destructive">
-                                        {formatCurrency(taxResult.totalPayable)}
+                                        {formatCurrency(mainResult.computation.totalTaxLiability)}
                                     </p>
                                 </div>
                             </CardFooter>
@@ -238,17 +303,24 @@ export default function TaxCalculatorPage() {
                     {comparisonResult && (
                         <Card>
                             <CardHeader>
-                                <CardTitle className="font-headline text-2xl flex items-center gap-2">
-                                    <Scale className="w-6 h-6 text-primary" /> Regime Comparison
-                                </CardTitle>
-                                <CardDescription>See which regime saves you more tax.</CardDescription>
+                                 <div className="flex justify-between items-center">
+                                    <div className="flex items-center gap-2">
+                                        <Scale className="w-6 h-6 text-primary" />
+                                        <CardTitle className="font-headline text-2xl">Regime Comparison</CardTitle>
+                                    </div>
+                                    <Button variant="outline" size="sm" onClick={handleExport} disabled={isExporting}>
+                                        <FileDown className="mr-2 h-4 w-4" />
+                                        {isExporting ? 'Exporting...' : 'Export PDF'}
+                                    </Button>
+                                </div>
+                                <CardDescription>See which regime saves you more tax. Hover over the bars for a detailed slab breakdown.</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 <div className="p-3 rounded-md text-center font-semibold bg-accent/10 text-accent-foreground">
-                                    {comparisonResult.oldRegimeTax < comparisonResult.newRegimeTax
-                                        ? `The Old Regime seems more beneficial, saving you ${formatCurrency(comparisonResult.newRegimeTax - comparisonResult.oldRegimeTax)}.`
-                                        : comparisonResult.newRegimeTax < comparisonResult.oldRegimeTax
-                                        ? `The New Regime seems more beneficial, saving you ${formatCurrency(comparisonResult.oldRegimeTax - comparisonResult.newRegimeTax)}.`
+                                    {comparisonResult.oldRegime.totalTaxLiability < comparisonResult.newRegime.totalTaxLiability
+                                        ? `The Old Regime seems more beneficial, saving you ${formatCurrency(comparisonResult.newRegime.totalTaxLiability - comparisonResult.oldRegime.totalTaxLiability)}.`
+                                        : comparisonResult.newRegime.totalTaxLiability < comparisonResult.oldRegime.totalTaxLiability
+                                        ? `The New Regime seems more beneficial, saving you ${formatCurrency(comparisonResult.oldRegime.totalTaxLiability - comparisonResult.newRegime.totalTaxLiability)}.`
                                         : `Both regimes result in the same tax liability.`}
                                 </div>
                                 <div className="h-[250px] w-full pt-4">
@@ -257,7 +329,7 @@ export default function TaxCalculatorPage() {
                                             <CartesianGrid strokeDasharray="3 3" />
                                             <XAxis dataKey="name" />
                                             <YAxis tickFormatter={(value) => formatCurrency(value as number)} />
-                                            <Tooltip formatter={(value) => formatCurrency(value as number)} />
+                                            <Tooltip content={<CustomTooltip />} cursor={{ fill: 'hsl(var(--muted))' }} />
                                             <Legend />
                                             <Bar dataKey="Tax" fill="hsl(var(--primary))" />
                                         </BarChart>

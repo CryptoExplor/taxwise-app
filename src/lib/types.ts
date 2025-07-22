@@ -25,6 +25,13 @@ export interface TaxesPaid {
   totalTaxPaid: number;
 }
 
+export interface TaxSlab {
+    range: string;
+    amount: number;
+    rate: number;
+    tax: number;
+}
+
 export interface TaxComputationResult {
   taxableIncome: number;
   taxBeforeCess: number;
@@ -32,6 +39,7 @@ export interface TaxComputationResult {
   taxAfterRebate: number;
   cess: number;
   totalTaxLiability: number;
+  slabBreakdown?: TaxSlab[]; // Optional because it might not exist on old data
 }
 
 export interface TaxComputation extends TaxComputationResult {
