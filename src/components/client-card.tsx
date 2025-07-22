@@ -164,13 +164,15 @@ export function ClientCard({ client, onDelete }: ClientCardProps) {
         (data.incomeDetails.interestIncomeSaving || 0) +
         (data.incomeDetails.dividendIncome || 0) +
         data.incomeDetails.otherSources;
+
+    const standardDeduction = data.incomeDetails.salary > 0 ? Math.min(data.incomeDetails.salary, 50000) : 0;
     
     // Recalculate Total Deductions
     data.deductions.totalDeductions = data.deductions.section80C + data.deductions.section80D; // Add other deductions here
 
     // Recompute taxes for both regimes for comparison
-    const oldRegimeTaxableIncome = Math.max(0, data.incomeDetails.grossTotalIncome - data.deductions.totalDeductions);
-    const newRegimeTaxableIncome = data.incomeDetails.grossTotalIncome;
+    const oldRegimeTaxableIncome = Math.max(0, data.incomeDetails.grossTotalIncome - data.deductions.totalDeductions - standardDeduction);
+    const newRegimeTaxableIncome = Math.max(0, data.incomeDetails.grossTotalIncome - standardDeduction);
     
     const oldRegimeResult = computeTax(oldRegimeTaxableIncome, data.personalInfo.age, 'Old', data.personalInfo.assessmentYear);
     const newRegimeResult = computeTax(newRegimeTaxableIncome, data.personalInfo.age, 'New', data.personalInfo.assessmentYear);
@@ -239,9 +241,12 @@ export function ClientCard({ client, onDelete }: ClientCardProps) {
     ? editableData.taxComparison?.oldRegime
     : editableData.taxComparison?.newRegime;
 
+  const standardDeduction = editableData.incomeDetails.salary > 0 ? Math.min(editableData.incomeDetails.salary, 50000) : 0;
+
   const taxableIncomeToShow = displayRegime === 'Old'
-    ? Math.max(0, editableData.incomeDetails.grossTotalIncome - editableData.deductions.totalDeductions)
-    : editableData.incomeDetails.grossTotalIncome;
+    ? Math.max(0, editableData.incomeDetails.grossTotalIncome - editableData.deductions.totalDeductions - standardDeduction)
+    : Math.max(0, editableData.incomeDetails.grossTotalIncome - standardDeduction);
+
 
   const finalAmount = computationToShow ? (computationToShow.totalTaxLiability - editableData.taxesPaid.totalTaxPaid) : 0;
   const netPayable = Math.max(0, finalAmount);
@@ -328,9 +333,9 @@ export function ClientCard({ client, onDelete }: ClientCardProps) {
                         <ComputationRow label="Gross Total Income" value={editableData.incomeDetails.grossTotalIncome} isTotal={true}/>
 
                         {/* --- Deductions Section --- */}
-                        <ComputationRow label="Less: Standard Deduction u/s 16(ia)" value={-50000} />
-                        <ComputationRow label="Less: Deductions u/s 80C" value={editableData.deductions.section80C} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80C')} />
-                        <ComputationRow label="Less: Deductions u/s 80D (Health)" value={editableData.deductions.section80D} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80D')} />
+                        <ComputationRow label="Less: Standard Deduction u/s 16(ia)" value={-standardDeduction} />
+                        <ComputationRow label="Less: Deductions u/s 80C" value={-editableData.deductions.section80C} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80C')} />
+                        <ComputationRow label="Less: Deductions u/s 80D (Health)" value={-editableData.deductions.section80D} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80D')} />
                         <ComputationRow label="NET TAXABLE AMOUNT" value={taxableIncomeToShow} isTotal={true}/>
 
                         {/* --- Tax Calculation Section --- */}
@@ -404,3 +409,5 @@ export function ClientCard({ client, onDelete }: ClientCardProps) {
     </Card>
   );
 }
+
+    
