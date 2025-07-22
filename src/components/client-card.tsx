@@ -256,19 +256,20 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
     setIsSaving(true);
     
     const { id, createdAt, ...dataToSave } = editableData;
+    const plainData = JSON.parse(JSON.stringify(dataToSave));
 
     try {
       if (isNewClient) {
         // Add new document
         const clientsCollectionRef = collection(db, `users/${user.uid}/clients`);
-        const docRef = await addDoc(clientsCollectionRef, { ...dataToSave, createdAt: serverTimestamp() });
+        const docRef = await addDoc(clientsCollectionRef, { ...plainData, createdAt: serverTimestamp() });
         toast({ title: "Success", description: "Client data saved successfully." });
         onSave({ ...editableData, id: docRef.id }); // Notify parent with the new ID
         setIsEditing(false); // Exit edit mode after saving
       } else {
         // Update existing document
         const docRef = doc(db, `users/${user.uid}/clients`, id);
-        await updateDoc(docRef, dataToSave);
+        await updateDoc(docRef, plainData);
         toast({ title: "Success", description: "Client data updated successfully." });
         onSave(editableData);
         setIsEditing(false);
@@ -421,15 +422,22 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
                         <ComputationRow label="Gross Total Income" value={editableData.incomeDetails.grossTotalIncome} isTotal={true}/>
 
                         {/* --- Deductions Section --- */}
-                        <ComputationRow label="Less: Standard Deduction u/s 16(ia)" value={-standardDeduction} />
-                        <ComputationRow label="Less: Interest on Home Loan" value={-(editableData.deductions.interestOnBorrowedCapital || 0)} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.interestOnBorrowedCapital')} />
-                        <ComputationRow label="Less: Deductions u/s 80C" value={-(editableData.deductions.section80C || 0)} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80C')} />
-                        <ComputationRow label="Less: Deductions u/s 80D (Health)" value={-(editableData.deductions.section80D || 0)} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80D')} />
-                        <ComputationRow label="Less: 80CCD(1B)" value={-(editableData.deductions.section80CCD1B || 0)} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80CCD1B')} />
-                        <ComputationRow label="Less: 80CCD(2)" value={-(editableData.deductions.section80CCD2 || 0)} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80CCD2')} />
-                        <ComputationRow label="Less: 80G (Donations)" value={-(editableData.deductions.section80G || 0)} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80G')} />
-                        <ComputationRow label="Less: 80TTA (Savings Interest)" value={-(editableData.deductions.section80TTA || 0)} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80TTA')} />
-                        <ComputationRow label="Less: 80TTB (Senior Citizen)" value={-(editableData.deductions.section80TTB || 0)} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80TTB')} />
+                         {displayRegime === 'Old' && (
+                            <>
+                                <ComputationRow label="Less: Standard Deduction u/s 16(ia)" value={-standardDeduction} />
+                                <ComputationRow label="Less: Interest on Home Loan" value={-(editableData.deductions.interestOnBorrowedCapital || 0)} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.interestOnBorrowedCapital')} />
+                                <ComputationRow label="Less: Deductions u/s 80C" value={-(editableData.deductions.section80C || 0)} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80C')} />
+                                <ComputationRow label="Less: Deductions u/s 80D (Health)" value={-(editableData.deductions.section80D || 0)} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80D')} />
+                                <ComputationRow label="Less: 80CCD(1B)" value={-(editableData.deductions.section80CCD1B || 0)} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80CCD1B')} />
+                                <ComputationRow label="Less: 80CCD(2)" value={-(editableData.deductions.section80CCD2 || 0)} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80CCD2')} />
+                                <ComputationRow label="Less: 80G (Donations)" value={-(editableData.deductions.section80G || 0)} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80G')} />
+                                <ComputationRow label="Less: 80TTA (Savings Interest)" value={-(editableData.deductions.section80TTA || 0)} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80TTA')} />
+                                <ComputationRow label="Less: 80TTB (Senior Citizen)" value={-(editableData.deductions.section80TTB || 0)} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'deductions.section80TTB')} />
+                            </>
+                         )}
+                         {displayRegime === 'New' && (
+                            <ComputationRow label="Less: Standard Deduction u/s 16(ia)" value={-standardDeduction} />
+                         )}
 
                         <ComputationRow label="NET TAXABLE AMOUNT" value={taxableIncomeToShow} isTotal={true}/>
 
@@ -463,38 +471,42 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
             )}
           </div>
           
-           {isEditing && (
-            <Collapsible className="px-4 pt-4 mt-4 border-t">
-                <CollapsibleTrigger asChild>
-                    <Button variant="link" className="p-0 text-lg font-semibold flex items-center gap-2">
-                        <ChevronDown className="w-5 h-5 transition-transform group-data-[state=open]:rotate-180" />
+           
+        <Collapsible className="px-4 pt-4 mt-4 border-t">
+            <CollapsibleTrigger asChild>
+                <div className="flex items-center justify-between cursor-pointer group">
+                    <h4 className="text-lg font-semibold flex items-center gap-2">
                         Capital Gains Manual Entry
+                    </h4>
+                    <Button variant="ghost" size="sm" className="group-data-[state=open]:rotate-180 transition-transform">
+                        <ChevronDown className="w-5 h-5" />
                     </Button>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 py-4">
-                        <div className="space-y-3 p-4 border rounded-lg">
-                             <h4 className="font-semibold text-center">Short Term Capital Gain</h4>
-                             <CapitalGainInputRow label="Purchase" name="purchase" value={stcg.purchase} onChange={(e) => handleCapitalGainChange(e, 'stcg')} />
-                             <CapitalGainInputRow label="Sale" name="sale" value={stcg.sale} onChange={(e) => handleCapitalGainChange(e, 'stcg')} />
-                             <CapitalGainInputRow label="Expenses" name="expenses" value={stcg.expenses} onChange={(e) => handleCapitalGainChange(e, 'stcg')} />
-                             <Separator />
-                             <CapitalGainInputRow label="Profit/Loss" name="profit" value={stcgProfit} isReadOnly={true} />
-                             <CapitalGainInputRow label="Total Gain" name="total" value={stcgTotalGain} isReadOnly={true} isBold={true} />
-                        </div>
-                        <div className="space-y-3 p-4 border rounded-lg">
-                             <h4 className="font-semibold text-center">Long Term Capital Gain</h4>
-                             <CapitalGainInputRow label="Purchase" name="purchase" value={ltcg.purchase} onChange={(e) => handleCapitalGainChange(e, 'ltcg')} />
-                             <CapitalGainInputRow label="Sale" name="sale" value={ltcg.sale} onChange={(e) => handleCapitalGainChange(e, 'ltcg')} />
-                             <CapitalGainInputRow label="Expenses" name="expenses" value={ltcg.expenses} onChange={(e) => handleCapitalGainChange(e, 'ltcg')} />
-                             <Separator />
-                             <CapitalGainInputRow label="Profit/Loss" name="profit" value={ltcgProfit} isReadOnly={true} />
-                             <CapitalGainInputRow label="Total Gain" name="total" value={ltcgTotalGain} isReadOnly={true} isBold={true} />
-                        </div>
+                </div>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 py-4">
+                    <div className="space-y-3 p-4 border rounded-lg">
+                            <h4 className="font-semibold text-center">Short Term Capital Gain</h4>
+                            <CapitalGainInputRow label="Purchase" name="purchase" value={stcg.purchase} onChange={(e) => handleCapitalGainChange(e, 'stcg')} isReadOnly={!isEditing}/>
+                            <CapitalGainInputRow label="Sale" name="sale" value={stcg.sale} onChange={(e) => handleCapitalGainChange(e, 'stcg')} isReadOnly={!isEditing}/>
+                            <CapitalGainInputRow label="Expenses" name="expenses" value={stcg.expenses} onChange={(e) => handleCapitalGainChange(e, 'stcg')} isReadOnly={!isEditing}/>
+                            <Separator />
+                            <CapitalGainInputRow label="Profit/Loss" name="profit" value={stcgProfit} onChange={()=>{}} isReadOnly={true} />
+                            <CapitalGainInputRow label="Total Gain" name="total" value={stcgTotalGain} onChange={()=>{}} isReadOnly={true} isBold={true} />
                     </div>
-                </CollapsibleContent>
-            </Collapsible>
-        )}
+                    <div className="space-y-3 p-4 border rounded-lg">
+                            <h4 className="font-semibold text-center">Long Term Capital Gain</h4>
+                            <CapitalGainInputRow label="Purchase" name="purchase" value={ltcg.purchase} onChange={(e) => handleCapitalGainChange(e, 'ltcg')} isReadOnly={!isEditing}/>
+                            <CapitalGainInputRow label="Sale" name="sale" value={ltcg.sale} onChange={(e) => handleCapitalGainChange(e, 'ltcg')} isReadOnly={!isEditing}/>
+                            <CapitalGainInputRow label="Expenses" name="expenses" value={ltcg.expenses} onChange={(e) => handleCapitalGainChange(e, 'ltcg')} isReadOnly={!isEditing}/>
+                            <Separator />
+                            <CapitalGainInputRow label="Profit/Loss" name="profit" value={ltcgProfit} onChange={()=>{}} isReadOnly={true} />
+                            <CapitalGainInputRow label="Total Gain" name="total" value={ltcgTotalGain} onChange={()=>{}} isReadOnly={true} isBold={true} />
+                    </div>
+                </div>
+            </CollapsibleContent>
+        </Collapsible>
+        
 
       </CardContent>
       <CardFooter className="flex-col items-stretch gap-4 p-4 bg-muted/50 rounded-b-lg mt-4">
@@ -545,3 +557,5 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
     </Card>
   );
 }
+
+    
