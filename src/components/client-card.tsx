@@ -620,9 +620,9 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
                 </CardContent>
             </Card>
 
-             <Card className="bg-muted/30 shadow-sm">
+            <Card className="bg-muted/30 shadow-sm">
                 <CardHeader><CardTitle>Deductions Manual Entry</CardTitle></CardHeader>
-                 <CardContent className="space-y-4">
+                <CardContent className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
                         {regularDeductions.map(({key, label}) => (
                             <div key={key} className="flex items-center justify-between">
@@ -671,7 +671,7 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
                         </Button>
                     )}
                      {displayRegime === 'New' && <p className="text-xs text-muted-foreground mt-2">Most deductions are not applicable under the New Regime, except for employer's contribution to NPS u/s 80CCD(2).</p>}
-                 </CardContent>
+                </CardContent>
              </Card>
 
               <Card className="bg-muted/30 shadow-sm">
@@ -740,3 +740,5 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
     </Card>
   );
 }
+
+    
