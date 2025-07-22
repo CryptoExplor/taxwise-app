@@ -24,8 +24,8 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType>({ user: null, userProfile: null, loading: true });
 
-const publicRoutes = ['/login', '/pricing', '/contact'];
-const protectedRoutes = ['/', '/profile', '/admin', '/calculator'];
+const publicRoutes = ['/login', '/pricing', '/contact', '/calculator'];
+const protectedRoutes = ['/', '/profile', '/admin'];
 
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -56,7 +56,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     if (loading) return;
 
-    const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
     const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route));
     
     if (!user && isProtectedRoute) {
@@ -68,7 +67,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   }, [user, loading, pathname, router]);
 
-  if (loading || (!user && protectedRoutes.some(route => pathname.startsWith(route)))) {
+  const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route));
+  if (loading && isProtectedRoute) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="text-center">
