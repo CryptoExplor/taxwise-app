@@ -145,7 +145,8 @@ export function ClientCard({ client }: ClientCardProps) {
         data.incomeDetails.businessIncome +
         data.incomeDetails.capitalGains.shortTerm +
         data.incomeDetails.capitalGains.longTerm +
-        (data.incomeDetails.interestIncome || 0) +
+        (data.incomeDetails.interestIncomeFD || 0) +
+        (data.incomeDetails.interestIncomeSaving || 0) +
         (data.incomeDetails.dividendIncome || 0) +
         data.incomeDetails.otherSources;
     
@@ -278,9 +279,15 @@ export function ClientCard({ client }: ClientCardProps) {
                         <tr className="bg-muted/30"><td colSpan={2} className="p-2 pl-4 font-bold">Income Particulars</td></tr>
                         <ComputationRow label="Income from Salary" value={editableData.incomeDetails.salary} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'incomeDetails.salary')} />
                         <ComputationRow label="Income from House Property" value={editableData.incomeDetails.houseProperty} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'incomeDetails.houseProperty')} />
-                        <ComputationRow label="Interest Income (FD, Savings)" value={editableData.incomeDetails.interestIncome || 0} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'incomeDetails.interestIncome')} isSubItem={true} />
+                        <ComputationRow label="Income from Business" value={editableData.incomeDetails.businessIncome} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'incomeDetails.businessIncome')} />
+                        <ComputationRow label="Capital Gains" value={editableData.incomeDetails.capitalGains.shortTerm + editableData.incomeDetails.capitalGains.longTerm} />
+                        
+                        <tr className="bg-muted/30"><td colSpan={2} className="p-2 pl-4 font-bold">Other Sources</td></tr>
+                        <ComputationRow label="Interest Income (FD, etc.)" value={editableData.incomeDetails.interestIncomeFD || 0} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'incomeDetails.interestIncomeFD')} isSubItem={true} />
+                        <ComputationRow label="Interest Income (Savings)" value={editableData.incomeDetails.interestIncomeSaving || 0} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'incomeDetails.interestIncomeSaving')} isSubItem={true} />
                         <ComputationRow label="Dividend Income" value={editableData.incomeDetails.dividendIncome || 0} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'incomeDetails.dividendIncome')} isSubItem={true} />
                         <ComputationRow label="Other Miscellaneous Income" value={editableData.incomeDetails.otherSources} isEditable={isEditing} onChange={(e) => handleInputChange(e, 'incomeDetails.otherSources')} isSubItem={true} />
+
                         <ComputationRow label="Gross Total Income" value={editableData.incomeDetails.grossTotalIncome} isTotal={true}/>
 
                         {/* --- Deductions Section --- */}

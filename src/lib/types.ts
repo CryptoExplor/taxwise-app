@@ -9,8 +9,9 @@ export interface IncomeDetails {
     shortTerm: number;
     longTerm: number;
   };
-  otherSources: number; // This will now act as a catch-all for other items
-  interestIncome?: number; // From Savings, Deposits etc.
+  otherSources: number; // Catch-all for miscellaneous items
+  interestIncomeFD?: number;
+  interestIncomeSaving?: number;
   dividendIncome?: number;
   grossTotalIncome: number;
 }

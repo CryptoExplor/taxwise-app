@@ -63,7 +63,8 @@ export async function parseITR(file: File): Promise<ClientDataToSave> {
         longTerm: get(jsonData, 'ScheduleCG.LongTermCapGain.TotalLongTermCapGain', 0),
       },
       // Break down other sources
-      interestIncome: getFromPaths(jsonData, ['ScheduleOS.IncomeOthSrc.Sec194AIntBanking', 'PartB_TI.IncomeFromOS.InterestGross'], 0),
+      interestIncomeFD: getFromPaths(jsonData, ['ScheduleOS.IncomeOthSrc.Sec194AIntBanking'], 0), // Assuming this is mostly FD
+      interestIncomeSaving: getFromPaths(jsonData, ['ScheduleOS.IncomeOthSrc.InterestFromSavings'], 0),
       dividendIncome: getFromPaths(jsonData, ['ScheduleOS.IncomeOthSrc.DividendInc', 'PartB_TI.IncomeFromOS.DividendGross'], 0),
       otherSources: getFromPaths(jsonData, ['ScheduleOS.IncomeOthSrc.OthersInc', 'PartB_TI.IncomeFromOS.OthersGross'], 0),
       grossTotalIncome: get(jsonData, 'PartB_TI.GrossTotalIncome', 0),
@@ -77,7 +78,8 @@ export async function parseITR(file: File): Promise<ClientDataToSave> {
             incomeDetails.businessIncome +
             incomeDetails.capitalGains.shortTerm +
             incomeDetails.capitalGains.longTerm +
-            (incomeDetails.interestIncome || 0) +
+            (incomeDetails.interestIncomeFD || 0) +
+            (incomeDetails.interestIncomeSaving || 0) +
             (incomeDetails.dividendIncome || 0) +
             incomeDetails.otherSources
         );
