@@ -3,7 +3,7 @@
 
 import { useState, useRef, useTransition, useEffect } from "react";
 import { collection, addDoc, onSnapshot, query, orderBy, updateDoc, doc } from "firebase/firestore";
-import { UploadCloud, Loader, Download, Sparkles } from "lucide-react";
+import { UploadCloud, Loader, Download, Sparkles, BarChart, FileText } from "lucide-react";
 import type { ClientData } from "@/lib/types";
 import { parseITR } from "@/lib/itr-parser";
 import { ClientCard } from "./client-card";
@@ -13,9 +13,10 @@ import { exportClientsToCSV } from "@/lib/csv-exporter";
 import { getTaxAnalysis, TaxAnalysisOutput } from "@/ai/flows/tax-analysis-flow";
 import { useAuth } from "./auth-provider";
 import { db } from "@/lib/firebase";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 
 export function Dashboard() {
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const [clients, setClients] = useState<ClientData[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
@@ -159,8 +160,8 @@ export function Dashboard() {
           <div className="flex items-center gap-3">
             <Sparkles className="w-8 h-8 text-accent" />
             <div>
-              <h2 className="text-3xl font-headline font-bold">Tax Dashboard</h2>
-              <p className="text-muted-foreground">Your ITR summaries at a glance.</p>
+              <h2 className="text-3xl font-headline font-bold">Welcome, {userProfile?.name || user?.email}</h2>
+              <p className="text-muted-foreground">You have {clients.length} client{clients.length !== 1 ? 's' : ''} saved.</p>
             </div>
           </div>
           {clients.length > 0 && (
@@ -190,6 +191,29 @@ export function Dashboard() {
           {clients.map((client) => (
             <ClientCard key={client.id} client={client} />
           ))}
+          
+          <Card className="lg:col-span-2">
+              <CardHeader>
+                  <CardTitle className="flex items-center gap-2 font-headline text-xl">
+                      <BarChart className="w-5 h-5" />
+                      Usage Summary
+                  </CardTitle>
+              </CardHeader>
+              <CardContent>
+                  <ul className="list-disc pl-5 space-y-3 text-muted-foreground">
+                      <li>
+                          <span className="font-semibold text-foreground">{clients.length}</span> Clients added
+                      </li>
+                      <li className="capitalize">
+                          Current Plan: <span className="font-semibold text-foreground">{userProfile?.plan || 'Free'}</span>
+                      </li>
+                       <li>
+                          <span className="font-semibold text-foreground">{clients.length}</span> Reports generated
+                      </li>
+                  </ul>
+              </CardContent>
+          </Card>
+
           {isProcessing && clients.length > 0 && (
             <div className="text-center flex flex-col items-center justify-center rounded-lg border border-dashed p-8 md:col-span-1 lg:col-span-2">
                 <Loader className="h-12 w-12 text-primary animate-spin mb-4" />
