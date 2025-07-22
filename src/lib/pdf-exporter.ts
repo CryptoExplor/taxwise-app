@@ -8,7 +8,7 @@ interface CalculatorData {
   totalDeductions: number;
   age: number;
   taxRegime: 'Old' | 'New';
-  assessmentYear: string; // Assuming '2024-25' for now
+  assessmentYear: string; 
   comparisonResult: {
     oldRegimeTax: number;
     newRegimeTax: number;
@@ -96,12 +96,25 @@ export async function generateCalculatorPDF(calculatorData: CalculatorData) {
 }
 
 
-export async function generatePDF(clientData: ClientData) {
+export async function generatePDF(clientData: ClientData, footerText?: string) {
   const { jsPDF } = await import('jspdf');
   const { default: autoTable } = await import('jspdf-autotable');
 
   const doc = new jsPDF();
   const { personalInfo, incomeDetails, deductions, taxesPaid, taxComputation } = clientData;
+
+  const addFooter = () => {
+      const pageCount = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+          doc.setPage(i);
+          doc.setFontSize(8);
+          doc.setFont('helvetica', 'italic');
+          const text = footerText || "ITR Summary";
+          const textWidth = doc.getStringUnitWidth(text) * doc.getFontSize() / doc.internal.scaleFactor;
+          const textX = (doc.internal.pageSize.width - textWidth) / 2;
+          doc.text(text, textX, doc.internal.pageSize.height - 10);
+      }
+  };
 
   doc.setFontSize(18);
   doc.text('ITR Summary Report', 14, 22);
@@ -182,5 +195,8 @@ export async function generatePDF(clientData: ClientData) {
     headStyles: { fillColor: [200, 200, 200], textColor: [0, 0, 0] },
   });
 
+  addFooter();
   doc.save(`${personalInfo.name}_${personalInfo.assessmentYear}_ITR_Summary.pdf`);
 }
+
+    
