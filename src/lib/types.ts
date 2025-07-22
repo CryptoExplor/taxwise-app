@@ -56,6 +56,7 @@ export interface PersonalInfo {
     pan: string;
     assessmentYear: string;
     age: number;
+    itrForm?: string; // To store detected ITR form type
 }
 
 // Data structure for data to be saved to Firestore

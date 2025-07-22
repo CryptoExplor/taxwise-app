@@ -24,6 +24,21 @@ const getFromPaths = (obj: any, paths: string[], defaultValue: any = 0) => {
     return defaultValue;
 };
 
+// Helper to detect ITR form type
+const detectITRForm = (obj: any): string => {
+    if (get(obj, 'ITR.ITR1', null)) return 'ITR-1';
+    if (get(obj, 'ITR.ITR2', null)) return 'ITR-2';
+    if (get(obj, 'ITR.ITR3', null)) return 'ITR-3';
+    if (get(obj, 'ITR.ITR4', null)) return 'ITR-4';
+    // Fallback for different structures
+    if (get(obj, 'ITR1', null)) return 'ITR-1';
+    if (get(obj, 'ITR2', null)) return 'ITR-2';
+    if (get(obj, 'ITR3', null)) return 'ITR-3';
+    if (get(obj, 'ITR4', null)) return 'ITR-4';
+    return 'Unknown';
+};
+
+
 /**
  * Parses various ITR JSON formats and computes a standardized summary.
  * @param {File} file - The uploaded JSON file.
@@ -34,7 +49,7 @@ export async function parseITR(file: File): Promise<ClientDataToSave> {
   const rawJson = JSON.parse(fileContent);
 
   // The actual ITR data is often nested inside one or two top-level keys.
-  const jsonData = rawJson.ITR?.ITR4 || rawJson.ITR?.ITR1 || rawJson;
+  const jsonData = rawJson.ITR?.ITR4 || rawJson.ITR?.ITR1 || rawJson.ITR?.ITR2 || rawJson.ITR?.ITR3 || rawJson;
 
   try {
     const firstName = getFromPaths(jsonData, ['PersonalInfo.AssesseeName.FirstName', 'PartA_GEN1.PersonalInfo.AssesseeName.FirstName'], '');
@@ -52,6 +67,7 @@ export async function parseITR(file: File): Promise<ClientDataToSave> {
         pan: getFromPaths(jsonData, ['PersonalInfo.PAN', 'PartA_GEN1.PersonalInfo.PAN'], 'N/A'),
         assessmentYear: ay,
         age: calculateAge(getFromPaths(jsonData, ['PersonalInfo.DOB', 'PartA_GEN1.PersonalInfo.DOB'], "")),
+        itrForm: detectITRForm(rawJson),
     };
     
     const incomeDetails = {

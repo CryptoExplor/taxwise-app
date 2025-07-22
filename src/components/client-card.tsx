@@ -23,6 +23,7 @@ import {
   XCircle,
   Scale,
   Trash2,
+  FileText,
 } from "lucide-react";
 import { generatePDF } from "@/lib/pdf-exporter";
 import { useState, useTransition, useEffect, useMemo } from "react";
@@ -259,8 +260,15 @@ export function ClientCard({ client, onDelete }: ClientCardProps) {
                 <CardTitle className="font-headline text-2xl">
                     Computation of Income
                 </CardTitle>
-                <CardDescription>
-                    Assessment Year: {editableData.personalInfo.assessmentYear}
+                 <CardDescription className="flex items-center gap-2">
+                    {editableData.personalInfo.itrForm && editableData.personalInfo.itrForm !== 'Unknown' && (
+                        <>
+                         <FileText className="w-4 h-4" />
+                         <span>Form: {editableData.personalInfo.itrForm}</span>
+                         <span className="text-muted-foreground/50">|</span>
+                        </>
+                    )}
+                    <span>AY: {editableData.personalInfo.assessmentYear}</span>
                 </CardDescription>
             </div>
             <div className="flex items-center gap-2">
