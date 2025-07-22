@@ -1,189 +1,105 @@
 
 import type { ClientData } from './types';
-import { formatCurrency } from './utils';
 
-// Type for the data coming from the Tax Calculator page
-interface CalculatorData {
-  grossTotalIncome: number;
-  totalDeductions: number;
-  age: number;
-  taxRegime: 'Old' | 'New';
-  assessmentYear: string; 
-  comparisonResult: {
-    oldRegimeTax: number;
-    newRegimeTax: number;
-  };
+declare const window: any;
+
+export function generatePdfReport(client: ClientData) {
+    if (typeof window.jspdf === 'undefined' || typeof window.jspdf.autoTable === 'undefined') {
+        alert("PDF generation libraries not loaded. Please try again.");
+        return;
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+
+    doc.setFontSize(18);
+    doc.text("TaxWise Tax Computation Report", 14, 22);
+    doc.setFontSize(12);
+    doc.text(`Client Name: ${client.clientName}`, 14, 30);
+    doc.text(`PAN: ${client.pan}`, 14, 37);
+    doc.text(`ITR Form Type: ${client.itrFormType}`, 14, 44);
+    doc.text(`Date: ${new Date().toLocaleDateString()}`, 14, 51);
+
+    const incomeData = Object.entries(client.income).map(([key, value]) => [
+        key.replace(/([A-Z])/g, ' $1').trim(),
+        `₹${Number(value).toLocaleString('en-IN')}`
+    ]);
+    doc.autoTable({
+        startY: 60,
+        head: [['Income Head', 'Amount']],
+        body: incomeData,
+        theme: 'striped',
+        styles: { fontSize: 10 },
+        headStyles: { fillColor: [23, 100, 191] },
+    });
+
+    const deductionsData = Object.entries(client.deductions).map(([key, value]) => [
+        key.replace(/([A-Z])/g, ' $1').replace('section', 'Section '),
+        `₹${Number(value).toLocaleString('en-IN')}`
+    ]);
+    doc.autoTable({
+        startY: (doc as any).lastAutoTable.finalY + 10,
+        head: [['Deduction Section', 'Amount']],
+        body: deductionsData,
+        theme: 'striped',
+        styles: { fontSize: 10 },
+        headStyles: { fillColor: [23, 100, 191] },
+    });
+
+    const taxComparisonData = [
+        ['Old Regime Tax', `₹${(client.taxOldRegime || 0).toLocaleString('en-IN')}`],
+        ['New Regime Tax', `₹${(client.taxNewRegime || 0).toLocaleString('en-IN')}`]
+    ];
+    doc.autoTable({
+        startY: (doc as any).lastAutoTable.finalY + 10,
+        head: [['Regime', 'Tax Payable']],
+        body: taxComparisonData,
+        theme: 'grid',
+        styles: { fontSize: 12, fontStyle: 'bold' },
+        headStyles: { fillColor: [23, 100, 191] },
+    });
+
+    doc.save(`${client.clientName}_Tax_Computation.pdf`);
 }
 
-export async function generateCalculatorPDF(calculatorData: CalculatorData) {
-  const { jsPDF } = await import('jspdf');
-  const { default: autoTable } = await import('jspdf-autotable');
+export function exportClientsToCsv(clients: ClientData[]) {
+    if (clients.length === 0) {
+        alert("No clients to export.");
+        return;
+    }
 
-  const doc = new jsPDF();
-  const { grossTotalIncome, totalDeductions, age, taxRegime, comparisonResult } = calculatorData;
+    const headers = [
+        "ID", "Client Name", "PAN", "DOB", "Address", "ITR Form Type",
+        ...Object.keys(clients[0]?.income || {}).map(k => `Income: ${k}`),
+        ...Object.keys(clients[0]?.deductions || {}).map(k => `Deduction: ${k}`),
+        "Tax (Old Regime)", "Tax (New Regime)", "Created At"
+    ];
 
-  doc.setFontSize(18);
-  doc.text('Quick Tax Calculation Report', 14, 22);
+    const csvRows = clients.map(client => {
+        const income = client.income || {};
+        const deductions = client.deductions || {};
+        const row = [
+            client.id,
+            `"${client.clientName}"`,
+            client.pan,
+            client.dob,
+            `"${(client.address || "").replace(/"/g, '""')}"`,
+            client.itrFormType,
+            ...Object.values(income).map(v => v),
+            ...Object.values(deductions).map(v => v),
+            client.taxOldRegime,
+            client.taxNewRegime,
+            client.createdAt,
+        ];
+        return row.join(',');
+    });
 
-  doc.setFontSize(12);
-  doc.text(`Assessment Year: ${'2024-25'}`, 14, 32);
-
-  // --- Input Details ---
-  doc.setFontSize(14);
-  doc.text("Inputs Provided", 14, 45);
-  autoTable(doc, {
-    startY: 48,
-    head: [['Description', 'Value']],
-    body: [
-      ['Gross Total Income', formatCurrency(grossTotalIncome)],
-      ['Total Deductions (for Old Regime)', formatCurrency(totalDeductions)],
-      ['Age', age.toString()],
-      ['Chosen Tax Regime', taxRegime],
-    ],
-    theme: 'grid',
-    styles: { fontSize: 10, cellPadding: 2 },
-    headStyles: { fillColor: [200, 200, 200], textColor: [0, 0, 0] },
-  });
-
-  let finalY = (doc as any).lastAutoTable.finalY + 15;
-
-  // --- Comparison Summary ---
-  doc.setFontSize(14);
-  doc.text("Regime Comparison Summary", 14, finalY);
-  autoTable(doc, {
-    startY: finalY + 3,
-    head: [['Tax Regime', 'Total Tax Payable']],
-    body: [
-      ['Old Regime', formatCurrency(comparisonResult.oldRegimeTax)],
-      ['New Regime', formatCurrency(comparisonResult.newRegimeTax)],
-    ],
-    theme: 'grid',
-    styles: { fontSize: 10, cellPadding: 2 },
-    headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255] },
-  });
-
-   finalY = (doc as any).lastAutoTable.finalY + 10;
-   
-   const savingsNewVsOld = comparisonResult.oldRegimeTax - comparisonResult.newRegimeTax;
-   let conclusionText = '';
-   if (savingsNewVsOld > 0) {
-       conclusionText = `The New Regime appears more beneficial, saving you ${formatCurrency(savingsNewVsOld)}.`;
-   } else if (savingsNewVsOld < 0) {
-       conclusionText = `The Old Regime appears more beneficial, saving you ${formatCurrency(-savingsNewVsOld)}.`;
-   } else {
-       conclusionText = 'Both regimes result in the same tax liability.'
-   }
-
-   doc.setFontSize(12);
-   doc.text('Conclusion:', 14, finalY);
-   doc.setFont('helvetica', 'bold');
-   doc.text(conclusionText, 14, finalY + 7);
-
-
-  // --- Footer ---
-  finalY = doc.internal.pageSize.height - 20;
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'italic');
-  doc.text(
-    'Disclaimer: This is an estimate based on the data provided and standard rules for AY 2024-25. It does not include surcharge or other complexities. Consult a tax professional for exact figures.',
-    14,
-    finalY,
-    { maxWidth: 180 }
-  );
-
-
-  doc.save(`TaxWise_Calculation_${'2024-25'}.pdf`);
-}
-
-
-export async function generatePDF(clientData: ClientData, footerText?: string) {
-  const { jsPDF } = await import('jspdf');
-  const { default: autoTable } = await import('jspdf-autotable');
-
-  const doc = new jsPDF();
-  const { personalInfo, incomeDetails, deductions, taxesPaid, taxComputation, taxRegime, taxComparison } = clientData;
-
-  const addFooter = () => {
-      const pageCount = doc.internal.getNumberOfPages();
-      for (let i = 1; i <= pageCount; i++) {
-          doc.setPage(i);
-          doc.setFontSize(8);
-          doc.setFont('helvetica', 'italic');
-          const text = footerText || "Generated by TaxWise";
-          const textWidth = doc.getStringUnitWidth(text) * doc.getFontSize() / doc.internal.scaleFactor;
-          const textX = (doc.internal.pageSize.width - textWidth) / 2;
-          doc.text(text, textX, doc.internal.pageSize.height - 10);
-      }
-  };
-
-  doc.setFontSize(18);
-  doc.text('Computation of Income', 14, 22);
-
-  autoTable(doc, {
-    startY: 28,
-    body: [
-        [{ content: `Name: ${personalInfo.name}`, styles: { fontStyle: 'bold'} }, { content: `Assessment Year: ${personalInfo.assessmentYear}`, styles: { halign: 'right' }}],
-        [{ content: `PAN: ${personalInfo.pan}`, styles: { fontStyle: 'bold'} }, { content: `Tax Regime: ${taxRegime}`, styles: { halign: 'right' }}],
-    ],
-    theme: 'plain',
-    styles: { fontSize: 10 },
-  });
-
-
-  let finalY = (doc as any).lastAutoTable.finalY + 5;
-
-  autoTable(doc, {
-    startY: finalY,
-    head: [['Particulars', 'Amount (₹)']],
-    body: [
-      // Income
-      [{ content: 'Income Particulars', styles: { fontStyle: 'bold', fillColor: '#F3F4F6' } }, { content: '', styles: { fillColor: '#F3F4F6' } }],
-      ['Income from Salary', formatCurrency(incomeDetails.salary)],
-      ['Income from House Property', formatCurrency(incomeDetails.houseProperty)],
-      ['Income from Business', formatCurrency(incomeDetails.businessIncome)],
-      ['Capital Gains', formatCurrency(incomeDetails.capitalGains.shortTerm + incomeDetails.capitalGains.longTerm)],
-      // Other Sources Breakdown
-      [{ content: 'Other Sources', styles: { fontStyle: 'bold'} }, ''],
-      [{ content: '  Interest Income (FD, etc.)', styles: { } }, formatCurrency(incomeDetails.interestIncomeFD || 0)],
-      [{ content: '  Interest Income (Savings)', styles: { } }, formatCurrency(incomeDetails.interestIncomeSaving || 0)],
-      [{ content: '  Dividend Income', styles: { } }, formatCurrency(incomeDetails.dividendIncome || 0)],
-      [{ content: '  Other Income', styles: { } }, formatCurrency(incomeDetails.otherSources)],
-      [{ content: 'Gross Total Income', styles: { fontStyle: 'bold', fillColor: '#E5E7EB' } }, { content: formatCurrency(incomeDetails.grossTotalIncome), styles: { fontStyle: 'bold', fillColor: '#E5E7EB' } }],
-      
-      // Deductions
-      [{ content: 'Deductions', styles: { fontStyle: 'bold', fillColor: '#F3F4F6' } }, { content: '', styles: { fillColor: '#F3F4F6' } }],
-      ['Less: Standard Deduction u/s 16(ia)', formatCurrency(-50000)],
-      ['Less: Deductions u/s 80C', formatCurrency(deductions.section80C)],
-      ['Less: Deductions u/s 80D (Health)', formatCurrency(deductions.section80D)],
-      [{ content: 'NET TAXABLE AMOUNT', styles: { fontStyle: 'bold', fillColor: '#E5E7EB' } }, { content: formatCurrency(taxComputation.taxableIncome), styles: { fontStyle: 'bold', fillColor: '#E5E7EB' } }],
-    ],
-    theme: 'grid',
-    styles: { fontSize: 10, cellPadding: 2 },
-    headStyles: { fillColor: '#3F51B5', textColor: '#FFFFFF' },
-  });
-
-  finalY = (doc as any).lastAutoTable.finalY + 10;
-
-   autoTable(doc, {
-    startY: finalY,
-    head: [['Tax on Total Income', 'Amount (₹)']],
-    body: [
-        ...(taxComputation.slabBreakdown || []).map(slab => ([`On ${formatCurrency(slab.amount)} @ ${slab.rate}%`, formatCurrency(slab.tax)])),
-        [{ content: 'Total Tax', styles: { fontStyle: 'bold' } }, { content: formatCurrency(taxComputation.taxBeforeCess), styles: { fontStyle: 'bold' } }],
-        ['Less: Rebate u/s 87A', formatCurrency(-taxComputation.rebate)],
-        ['Add: Education Cess (4%)', formatCurrency(taxComputation.cess)],
-        [{ content: 'TOTAL TAX PAYABLE', styles: { fontStyle: 'bold', fillColor: '#E5E7EB' } }, { content: formatCurrency(taxComputation.totalTaxLiability), styles: { fontStyle: 'bold', fillColor: '#E5E7EB' } }],
-        ['Less: T.D.S.', formatCurrency(-taxesPaid.tds)],
-         taxComputation.netTaxPayable > 0
-            ? [{ content: 'Amount to be PAYABLE', styles: { fontStyle: 'bold', fillColor: '#FECACA', textColor: '#DC2626' } }, { content: formatCurrency(taxComputation.netTaxPayable), styles: { fontStyle: 'bold', fillColor: '#FECACA', textColor: '#DC2626' } }]
-            : [{ content: 'Refundable', styles: { fontStyle: 'bold', fillColor: '#D1FAE5', textColor: '#059669' } }, { content: formatCurrency(taxComputation.refund), styles: { fontStyle: 'bold', fillColor: '#D1FAE5', textColor: '#059669' } }],
-    ],
-    theme: 'grid',
-    styles: { fontSize: 10, cellPadding: 2 },
-    headStyles: { fillColor: '#3F51B5', textColor: '#FFFFFF' },
-  });
-
-
-  addFooter();
-  doc.save(`${personalInfo.name}_${personalInfo.assessmentYear}_ITR_Summary.pdf`);
+    const csvString = [headers.join(','), ...csvRows].join('\n');
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.setAttribute('download', 'taxwise_clients.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 }

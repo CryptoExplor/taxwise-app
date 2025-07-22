@@ -29,7 +29,7 @@ export const calculateCapitalGainsTax = (transactions: CapitalGainsTransaction[]
 
         if (gain <= 0) return;
 
-        if (tx.assetType === 'equity_listed' || tx.assetType === 'equity_mf') {
+        if (tx.assetType === 'equity_listed') {
             if (holdingPeriodDays <= 365) {
                 totalSTCG111A += gain;
             } else {
@@ -66,8 +66,7 @@ export const calculateCapitalGainsTax = (transactions: CapitalGainsTransaction[]
     return Math.round(capitalGainsTax);
 };
 
-
-export const computeTax = (incomeData: IncomeData, deductions: DeductionData, regime: 'old' | 'new', capitalGainsTransactions: CapitalGainsTransaction[] = []) => {
+export const computeTax = (incomeData: IncomeData, deductions: DeductionData, regime: 'old' | 'new', capitalGainsTransactions: CapitalGainsTransaction[] = [], dob: string | null = null): number => {
     let incomeFromSalary = incomeData.salary || 0;
     let incomeFromInterest = incomeData.interestIncome || 0;
     let incomeFromOtherSources = incomeData.otherIncome || 0;
@@ -78,6 +77,22 @@ export const computeTax = (incomeData: IncomeData, deductions: DeductionData, re
     let grossTotalIncome = incomeFromSalary + incomeFromInterest + incomeFromOtherSources + incomeFromBusiness;
     let taxableIncome = grossTotalIncome;
     let taxPayable = 0;
+
+    let age = 30; // Default age
+    if (dob) {
+        try {
+            const birthDate = new Date(dob);
+            const today = new Date();
+            let calculatedAge = today.getFullYear() - birthDate.getFullYear();
+            const m = today.getMonth() - birthDate.getMonth();
+            if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+                calculatedAge--;
+            }
+            age = calculatedAge;
+        } catch (e) {
+            console.error("Invalid DOB format", e);
+        }
+    }
 
     const standardDeduction = 50000;
     if (incomeFromSalary > 0) {
@@ -97,20 +112,31 @@ export const computeTax = (incomeData: IncomeData, deductions: DeductionData, re
 
         taxableIncome -= totalDeductions;
         taxableIncome = Math.max(0, taxableIncome);
-
-        if (taxableIncome <= 250000) taxPayable = 0;
-        else if (taxableIncome <= 500000) taxPayable = (taxableIncome - 250000) * 0.05;
-        else if (taxableIncome <= 1000000) taxPayable = 12500 + (taxableIncome - 500000) * 0.20;
-        else taxPayable = 112500 + (taxableIncome - 1000000) * 0.30;
         
-        if (grossTotalIncome <= 500000) {
-            taxPayable = Math.max(0, taxPayable - 12500);
+        // Old Regime Slabs based on age
+        if (age >= 80) { // Super Senior Citizen
+            if (taxableIncome > 1000000) taxPayable = 100000 + (taxableIncome - 1000000) * 0.30;
+            else if (taxableIncome > 500000) taxPayable = (taxableIncome - 500000) * 0.20;
+            else taxPayable = 0;
+        } else if (age >= 60) { // Senior Citizen
+            if (taxableIncome > 1000000) taxPayable = 110000 + (taxableIncome - 1000000) * 0.30;
+            else if (taxableIncome > 500000) taxPayable = 10000 + (taxableIncome - 300000) * 0.20;
+            else taxPayable = 0;
+        } else { // Below 60
+            if (taxableIncome > 1000000) taxPayable = 112500 + (taxableIncome - 1000000) * 0.30;
+            else if (taxableIncome > 500000) taxPayable = 12500 + (taxableIncome - 500000) * 0.20;
+            else if (taxableIncome > 250000) taxPayable = (taxableIncome - 250000) * 0.05;
+            else taxPayable = 0;
+        }
+
+        if (taxableIncome <= 500000) {
+            taxPayable = 0; // Rebate u/s 87A makes it zero
         }
 
     } else { // New Regime
         taxableIncome -= (deductions.section80CCD2 || 0);
         taxableIncome = Math.max(0, taxableIncome);
-
+        
         if (taxableIncome <= 300000) taxPayable = 0;
         else if (taxableIncome <= 600000) taxPayable = (taxableIncome - 300000) * 0.05;
         else if (taxableIncome <= 900000) taxPayable = 15000 + (taxableIncome - 600000) * 0.10;
@@ -118,13 +144,37 @@ export const computeTax = (incomeData: IncomeData, deductions: DeductionData, re
         else if (taxableIncome <= 1500000) taxPayable = 90000 + (taxableIncome - 1200000) * 0.20;
         else taxPayable = 150000 + (taxableIncome - 1500000) * 0.30;
 
-        if (grossTotalIncome <= 700000) {
-            taxPayable = Math.max(0, taxPayable - 25000);
+        if (taxableIncome <= 700000) {
+             taxPayable = 0; // Rebate u/s 87A
         }
     }
     
     taxPayable += taxOnCapitalGains;
-    taxPayable += taxPayable * 0.04; // Cess
 
-    return Math.round(taxPayable);
+    let totalTaxBeforeCess = taxPayable;
+    
+    // Surcharge
+    let surcharge = 0;
+    if (grossTotalIncome > 5000000) {
+        if (grossTotalIncome <= 10000000) surcharge = totalTaxBeforeCess * 0.10;
+        else if (grossTotalIncome <= 20000000) surcharge = totalTaxBeforeCess * 0.15;
+        else if (grossTotalIncome <= 50000000) surcharge = totalTaxBeforeCess * 0.25;
+        else surcharge = totalTaxBeforeCess * 0.37;
+        
+        // Simplified Marginal Relief
+        const taxOnThreshold = computeTax(
+            {...incomeData, salary: 5000000 - (grossTotalIncome - incomeData.salary)}, 
+            deductions, regime, capitalGainsTransactions, dob
+        );
+        const incomeExceeding = grossTotalIncome - 5000000;
+        if ((totalTaxBeforeCess + surcharge) > (taxOnThreshold + incomeExceeding)) {
+            surcharge = (taxOnThreshold + incomeExceeding) - totalTaxBeforeCess;
+        }
+    }
+    
+    totalTaxBeforeCess += surcharge;
+    
+    const cess = totalTaxBeforeCess * 0.04;
+    
+    return Math.round(totalTaxBeforeCess + cess);
 };

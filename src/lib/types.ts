@@ -7,14 +7,14 @@ export interface CapitalGainsTransaction {
     purchasePrice: number;
     salePrice: number;
     expenses: number;
-    fmv2018?: number;
+    fmv2018: number;
 }
 
 export interface IncomeData {
     salary: number;
     interestIncome: number;
     otherIncome: number;
-    capitalGains: number;
+    capitalGains: number; // Placeholder for aggregate from JSON
     businessIncome: number;
     speculationIncome: number;
     fnoIncome: number;
