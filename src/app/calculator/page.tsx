@@ -12,7 +12,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { computeTax } from '@/lib/tax-calculator';
 import { formatCurrency } from '@/lib/utils';
-import { ArrowLeft, Calculator as CalculatorIcon, ReceiptText, Landmark, Scale, FileDown } from 'lucide-react';
+import { ArrowLeft, Calculator as CalculatorIcon, ReceiptText, Landmark, Scale, FileDown, TrendingUp, BookOpen } from 'lucide-react';
 import Link from 'next/link';
 import { Separator } from '@/components/ui/separator';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from "recharts";
@@ -174,6 +174,37 @@ export default function TaxCalculatorPage() {
         }
         return null;
     };
+    
+    const BreakdownDisplay = ({ title, result }: { title: string; result: TaxComputationResult }) => (
+        <div>
+            <h4 className="font-headline font-semibold mb-3 flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-muted-foreground" /> {title}
+            </h4>
+            <div className="space-y-2 text-sm border p-3 rounded-lg bg-muted/30">
+                {(result.slabBreakdown || []).map((slab, i) => (
+                    <div key={i} className="flex justify-between">
+                        <span>{slab.range} @ {slab.rate}%</span>
+                        <span>{formatCurrency(slab.tax)}</span>
+                    </div>
+                ))}
+                <Separator />
+                <div className="flex justify-between">
+                    <span>Rebate u/s 87A</span>
+                    <span>- {formatCurrency(result.rebate)}</span>
+                </div>
+                <Separator />
+                <div className="flex justify-between">
+                    <span>Health & Edu Cess (4%)</span>
+                    <span>+ {formatCurrency(result.cess)}</span>
+                </div>
+                <Separator />
+                <div className="flex justify-between font-bold">
+                    <span>Total Tax</span>
+                    <span>{formatCurrency(result.totalTaxLiability)}</span>
+                </div>
+            </div>
+        </div>
+    );
 
 
     return (
@@ -323,7 +354,7 @@ export default function TaxCalculatorPage() {
                                 </div>
                                 <CardDescription>See which regime saves you more tax. Hover over the bars for a detailed slab breakdown.</CardDescription>
                             </CardHeader>
-                            <CardContent className="space-y-4">
+                            <CardContent className="space-y-6">
                                 <div className="p-3 rounded-md text-center font-semibold bg-accent/10 text-accent-foreground">
                                     {comparisonResult.oldRegime.totalTaxLiability < comparisonResult.newRegime.totalTaxLiability
                                         ? `The Old Regime seems more beneficial, saving you ${formatCurrency(comparisonResult.newRegime.totalTaxLiability - comparisonResult.oldRegime.totalTaxLiability)}.`
@@ -342,6 +373,11 @@ export default function TaxCalculatorPage() {
                                             <Bar dataKey="Tax" fill="hsl(var(--primary))" />
                                         </BarChart>
                                     </ResponsiveContainer>
+                                </div>
+                                <Separator />
+                                <div className="grid md:grid-cols-2 gap-6">
+                                    <BreakdownDisplay title="Old Regime Breakdown" result={comparisonResult.oldRegime} />
+                                    <BreakdownDisplay title="New Regime Breakdown" result={comparisonResult.newRegime} />
                                 </div>
                             </CardContent>
                         </Card>
