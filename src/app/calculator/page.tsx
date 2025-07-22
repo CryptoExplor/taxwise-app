@@ -55,7 +55,7 @@ export default function TaxCalculatorPage() {
     const [formData, setFormData] = useState<CalculatorFormValues | null>(null);
 
 
-    const { control, handleSubmit, watch, formState: { errors } } = useForm<CalculatorFormValues>({
+    const { control, handleSubmit, watch, setValue, formState: { errors } } = useForm<CalculatorFormValues>({
         resolver: zodResolver(calculatorSchema),
         defaultValues: {
             grossTotalIncome: 500000,
@@ -66,6 +66,14 @@ export default function TaxCalculatorPage() {
     });
 
     const taxRegime = watch('taxRegime');
+    
+    // Effect to handle regime change
+    React.useEffect(() => {
+        if (taxRegime === 'New') {
+            setValue('totalDeductions', 0);
+        }
+    }, [taxRegime, setValue]);
+
 
     const onSubmit = (data: CalculatorFormValues) => {
         setFormData(data);
@@ -196,7 +204,7 @@ export default function TaxCalculatorPage() {
                                     name="grossTotalIncome"
                                     control={control}
                                     render={({ field }) => (
-                                        <Input {...field} type="number" id="grossTotalIncome" placeholder="e.g., 800000" onChange={e => field.onChange(e.target.valueAsNumber)} />
+                                        <Input {...field} type="number" id="grossTotalIncome" placeholder="e.g., 800000" onChange={e => field.onChange(e.target.valueAsNumber || 0)} />
                                     )}
                                 />
                                 {errors.grossTotalIncome && <p className="text-sm text-destructive">{errors.grossTotalIncome.message}</p>}
@@ -207,7 +215,7 @@ export default function TaxCalculatorPage() {
                                     name="age"
                                     control={control}
                                     render={({ field }) => (
-                                        <Input {...field} type="number" id="age" placeholder="e.g., 35" onChange={e => field.onChange(e.target.valueAsNumber)} />
+                                        <Input {...field} type="number" id="age" placeholder="e.g., 35" onChange={e => field.onChange(e.target.valueAsNumber || 0)} />
                                     )}
                                 />
                                 {errors.age && <p className="text-sm text-destructive">{errors.age.message}</p>}
@@ -218,7 +226,7 @@ export default function TaxCalculatorPage() {
                                     name="taxRegime"
                                     control={control}
                                     render={({ field }) => (
-                                       <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex gap-4">
+                                       <RadioGroup onValueChange={field.onChange} value={field.value} className="flex gap-4">
                                             <div className="flex items-center space-x-2">
                                                 <RadioGroupItem value="New" id="new-regime" />
                                                 <Label htmlFor="new-regime">New Regime (Default)</Label>
@@ -237,7 +245,7 @@ export default function TaxCalculatorPage() {
                                     name="totalDeductions"
                                     control={control}
                                     render={({ field }) => (
-                                        <Input {...field} type="number" id="totalDeductions" placeholder="e.g., 150000" disabled={taxRegime === 'New'} onChange={e => field.onChange(e.target.valueAsNumber || 0)} value={taxRegime === 'New' ? 0 : field.value} />
+                                        <Input {...field} type="number" id="totalDeductions" placeholder="e.g., 150000" disabled={taxRegime === 'New'} onChange={e => field.onChange(e.target.valueAsNumber || 0)} />
                                     )}
                                 />
                                  {taxRegime === 'New' && <p className="text-xs text-muted-foreground">Deductions are generally not applicable under the New Regime.</p>}
@@ -343,3 +351,5 @@ export default function TaxCalculatorPage() {
         </div>
     );
 }
+
+    
