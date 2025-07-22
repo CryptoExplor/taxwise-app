@@ -124,6 +124,10 @@ export function Dashboard() {
     fileInputRef.current?.click();
   };
   
+  const handleClientDelete = (clientId: string) => {
+    setClients(prevClients => prevClients.filter(client => client.id !== clientId));
+  };
+  
   const UploadArea = () => (
     <div className="text-center flex flex-col items-center justify-center min-h-[40vh] bg-background rounded-lg border-2 border-dashed border-border p-8">
         <UploadCloud className="w-16 h-16 mb-4 text-accent" />
@@ -189,7 +193,7 @@ export function Dashboard() {
       {clients.length > 0 && (
         <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
           {clients.map((client) => (
-            <ClientCard key={client.id} client={client} />
+            <ClientCard key={client.id} client={client} onDelete={handleClientDelete} />
           ))}
           
           <Card className="lg:col-span-2">
