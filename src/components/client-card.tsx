@@ -24,6 +24,7 @@ import {
   Lightbulb,
   RefreshCw,
   Loader,
+  Scale,
 } from "lucide-react";
 import { generatePDF } from "@/lib/pdf-exporter";
 import { useState, useTransition } from "react";
@@ -48,7 +49,7 @@ interface ClientCardProps {
 export function ClientCard({ client }: ClientCardProps) {
   const { user, userProfile } = useAuth();
   const { toast } = useToast();
-  const { personalInfo, incomeDetails, deductions, taxesPaid, taxComputation, taxRegime, aiSummary, aiTips } = client;
+  const { personalInfo, incomeDetails, deductions, taxesPaid, taxComputation, taxRegime, aiSummary, aiTips, taxComparison } = client;
   const [isExporting, setIsExporting] = useState(false);
   const [isRefreshing, startTransition] = useTransition();
 
@@ -155,7 +156,7 @@ export function ClientCard({ client }: ClientCardProps) {
             <AccordionItem value="item-2">
               <AccordionTrigger className="font-headline text-lg font-semibold">
                 <div className="flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-accent" /> AI Analysis
+                  <Sparkles className="w-5 h-5 text-accent" /> AI Analysis & Comparison
                 </div>
               </AccordionTrigger>
               <AccordionContent>
@@ -180,6 +181,30 @@ export function ClientCard({ client }: ClientCardProps) {
                                 {isRefreshing ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
                                 {isRefreshing ? "Refreshing..." : "Refresh AI Analysis"}
                             </Button>
+                        </div>
+                    )}
+
+                    {taxComparison && (
+                        <div className="space-y-3 pt-4">
+                            <Separator />
+                            <h4 className="font-semibold flex items-center gap-2"><Scale className="w-4 h-4 text-blue-500" /> Regime Comparison:</h4>
+                            <div className="flex justify-around text-center p-2 rounded-lg bg-muted">
+                                <div>
+                                    <p className="text-muted-foreground text-sm font-semibold">Old Regime</p>
+                                    <p className="text-md font-bold">{formatCurrency(taxComparison.oldRegime.totalTaxLiability)}</p>
+                                </div>
+                                <div>
+                                    <p className="text-muted-foreground text-sm font-semibold">New Regime</p>
+                                    <p className="text-md font-bold">{formatCurrency(taxComparison.newRegime.totalTaxLiability)}</p>
+                                </div>
+                            </div>
+                             <div className="p-2 rounded-md text-center font-semibold text-sm bg-accent/10 text-accent-foreground">
+                                {taxComparison.oldRegime.totalTaxLiability < taxComparison.newRegime.totalTaxLiability
+                                    ? `The Old Regime seems more beneficial, saving you ${formatCurrency(taxComparison.newRegime.totalTaxLiability - taxComparison.oldRegime.totalTaxLiability)}.`
+                                    : taxComparison.newRegime.totalTaxLiability < taxComparison.oldRegime.totalTaxLiability
+                                    ? `The New Regime seems more beneficial, saving you ${formatCurrency(taxComparison.oldRegime.totalTaxLiability - taxComparison.newRegime.totalTaxLiability)}.`
+                                    : `Both regimes result in the same tax liability.`}
+                            </div>
                         </div>
                     )}
                  </div>

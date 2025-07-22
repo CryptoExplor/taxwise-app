@@ -39,7 +39,6 @@ export interface TaxComputation extends TaxComputationResult {
   refund: number;
 }
 
-
 export interface PersonalInfo {
     name: string;
     pan: string;
@@ -57,6 +56,11 @@ export interface ClientDataToSave {
   taxesPaid: TaxesPaid;
   taxComputation: TaxComputation;
   taxRegime: 'Old' | 'New';
+  // Add a new field to store the comparison
+  taxComparison?: {
+    oldRegime: TaxComputationResult;
+    newRegime: TaxComputationResult;
+  };
   aiSummary?: string;
   aiTips?: string[];
 }

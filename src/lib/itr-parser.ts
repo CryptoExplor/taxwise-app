@@ -90,16 +90,25 @@ export async function parseITR(file: File): Promise<ClientDataToSave> {
     
     const taxRegime = getFromPaths(jsonData, ['FilingStatus.NewTaxRegime'], 'N') === 'Y' ? 'New' : 'Old';
     
-    const taxableIncome = getFromPaths(jsonData, ['PartB_TTI.TaxableTotalIncome', 'TotalTaxableIncome'],
-       Math.max(0, incomeDetails.grossTotalIncome - deductions.totalDeductions)
-    );
+    // --- START of new calculation logic ---
 
-    const taxComputationResult = computeTax(
-        taxableIncome,
-        personalInfo.age,
-        taxRegime,
-        personalInfo.assessmentYear
-    );
+    // Calculate for both regimes
+    const oldRegimeTaxableIncome = Math.max(0, incomeDetails.grossTotalIncome - deductions.totalDeductions);
+    const newRegimeTaxableIncome = incomeDetails.grossTotalIncome; // Deductions not considered for New Regime
+
+    const oldRegimeResult = computeTax(oldRegimeTaxableIncome, personalInfo.age, 'Old', personalInfo.assessmentYear);
+    const newRegimeResult = computeTax(newRegimeTaxableIncome, personalInfo.age, 'New', personalInfo.assessmentYear);
+    
+    const taxComparison = {
+      oldRegime: oldRegimeResult,
+      newRegime: newRegimeResult,
+    };
+
+    // Determine the primary computation result based on the file's tax regime
+    const taxComputationResult = taxRegime === 'Old' ? oldRegimeResult : newRegimeResult;
+    const taxableIncome = taxRegime === 'Old' ? oldRegimeTaxableIncome : newRegimeTaxableIncome;
+
+    // --- END of new calculation logic ---
 
     const taxesPaid = {
       tds: get(jsonData, 'TaxPayments.TDS', 0),
@@ -130,6 +139,7 @@ export async function parseITR(file: File): Promise<ClientDataToSave> {
         netTaxPayable: Math.max(0, finalAmount),
         refund: Math.max(0, -finalAmount),
       },
+      taxComparison, // Add the comparison object
       aiSummary: '', // Initialize empty
       aiTips: [], // Initialize empty
     };
