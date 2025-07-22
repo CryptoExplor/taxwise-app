@@ -24,7 +24,10 @@ export function Dashboard() {
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+       setIsInitialLoading(false);
+       return;
+    }
     
     setIsInitialLoading(true);
     const clientsCollectionRef = collection(db, `users/${user.uid}/clients`);
