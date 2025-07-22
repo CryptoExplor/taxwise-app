@@ -120,6 +120,16 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
     // When editing is toggled, or client data changes, reset state
     if (!isEditing && !isNewClient) {
       setEditableData(client);
+    } else {
+        // Ensure customDeductions is an array
+        const dataWithInitializedDeductions = {
+            ...client,
+            deductions: {
+                ...client.deductions,
+                customDeductions: Array.isArray(client.deductions.customDeductions) ? client.deductions.customDeductions : []
+            }
+        };
+        setEditableData(dataWithInitializedDeductions);
     }
     setDisplayRegime(client.taxRegime);
   }, [client, isEditing, isNewClient]);
@@ -477,64 +487,61 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
                 </CardContent>
              </Card>
 
-             <Card className="bg-muted/30 shadow-sm">
+            <Card className="bg-muted/30 shadow-sm">
                 <CardHeader>
                     <CardTitle>Capital Gains Manual Entry</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                    {([
-                    { type: 'stcg', label: 'Short Term' },
-                    { type: 'ltcg', label: 'Long Term' }
-                    ] as const).map(({ type, label }) => (
-                    <div key={type}>
-                        <h4 className="font-semibold text-md text-muted-foreground mb-2">
-                        {label} Capital Gain
-                        </h4>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div>
-                            <Label htmlFor={`${type}-purchase`}>Purchase</Label>
-                            <Input
-                                id={`${type}-purchase`}
-                                name="purchase"
-                                type="number"
-                                value={editableData.incomeDetails.capitalGains[type].purchase}
-                                onChange={(e) => handleCapitalGainChange(e, type)}
-                                readOnly={!isEditing}
-                            />
+                    {(['stcg', 'ltcg'] as const).map((type) => (
+                        <div key={type}>
+                            <h4 className="font-semibold text-md text-muted-foreground mb-2">
+                                {type === 'stcg' ? 'Short Term' : 'Long Term'} Capital Gain
+                            </h4>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div>
+                                    <Label htmlFor={`${type}-purchase`}>Purchase</Label>
+                                    <Input
+                                        id={`${type}-purchase`}
+                                        name="purchase"
+                                        type="number"
+                                        value={editableData.incomeDetails.capitalGains[type].purchase}
+                                        onChange={(e) => handleCapitalGainChange(e, type)}
+                                        readOnly={!isEditing}
+                                    />
+                                </div>
+                                <div>
+                                    <Label htmlFor={`${type}-sale`}>Sale</Label>
+                                    <Input
+                                        id={`${type}-sale`}
+                                        name="sale"
+                                        type="number"
+                                        value={editableData.incomeDetails.capitalGains[type].sale}
+                                        onChange={(e) => handleCapitalGainChange(e, type)}
+                                        readOnly={!isEditing}
+                                    />
+                                </div>
+                                <div>
+                                    <Label htmlFor={`${type}-expenses`}>Expenses</Label>
+                                    <Input
+                                        id={`${type}-expenses`}
+                                        name="expenses"
+                                        type="number"
+                                        value={editableData.incomeDetails.capitalGains[type].expenses}
+                                        onChange={(e) => handleCapitalGainChange(e, type)}
+                                        readOnly={!isEditing}
+                                    />
+                                </div>
+                                <div>
+                                    <Label>Profit / Loss</Label>
+                                    <Input
+                                        readOnly
+                                        disabled
+                                        value={formatCurrency(computeCapitalGain(editableData.incomeDetails.capitalGains[type]))}
+                                        className="font-semibold"
+                                    />
+                                </div>
+                            </div>
                         </div>
-                        <div>
-                            <Label htmlFor={`${type}-sale`}>Sale</Label>
-                            <Input
-                                id={`${type}-sale`}
-                                name="sale"
-                                type="number"
-                                value={editableData.incomeDetails.capitalGains[type].sale}
-                                onChange={(e) => handleCapitalGainChange(e, type)}
-                                readOnly={!isEditing}
-                            />
-                        </div>
-                        <div>
-                            <Label htmlFor={`${type}-expenses`}>Expenses</Label>
-                            <Input
-                                id={`${type}-expenses`}
-                                name="expenses"
-                                type="number"
-                                value={editableData.incomeDetails.capitalGains[type].expenses}
-                                onChange={(e) => handleCapitalGainChange(e, type)}
-                                readOnly={!isEditing}
-                            />
-                        </div>
-                        <div>
-                            <Label>Profit / Loss</Label>
-                            <Input
-                            readOnly
-                            disabled
-                            value={formatCurrency(computeCapitalGain(editableData.incomeDetails.capitalGains[type]))}
-                            className="font-semibold"
-                            />
-                        </div>
-                        </div>
-                    </div>
                     ))}
                 </CardContent>
             </Card>
@@ -542,20 +549,23 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
              <Card className="bg-muted/30 shadow-sm">
                 <CardHeader><CardTitle>Deductions Manual Entry</CardTitle></CardHeader>
                  <CardContent className="space-y-4">
-                    {regularDeductions.map(({key, label}) => (
-                         <div key={key} className="grid grid-cols-2 items-center">
-                            <Label htmlFor={key}>{label}</Label>
-                            <Input 
-                                id={key}
-                                type="number"
-                                value={editableData.deductions[key] || 0}
-                                onChange={(e) => handleDeductionChange(key, e.target.value)}
-                                readOnly={!isEditing || displayRegime === 'New'}
-                                disabled={!isEditing || displayRegime === 'New'}
-                            />
-                         </div>
-                    ))}
-                    <Separator />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                        {regularDeductions.map(({key, label}) => (
+                            <div key={key} className="flex items-center justify-between">
+                                <Label htmlFor={key} className="flex-1">{label}</Label>
+                                <Input 
+                                    id={key}
+                                    type="number"
+                                    className="w-1/2"
+                                    value={editableData.deductions[key] || 0}
+                                    onChange={(e) => handleDeductionChange(key, e.target.value)}
+                                    readOnly={!isEditing || displayRegime === 'New'}
+                                    disabled={!isEditing || displayRegime === 'New'}
+                                />
+                            </div>
+                        ))}
+                    </div>
+                    <Separator className="my-6"/>
                     <h4 className="font-semibold text-md text-muted-foreground">Custom Deductions</h4>
                     {editableData.deductions.customDeductions?.map((deduction) => (
                         <div key={deduction.id} className="grid grid-cols-[1fr,1fr,auto] gap-2 items-center">
@@ -652,4 +662,3 @@ export function ClientCard({ client, onDelete, onSave }: ClientCardProps) {
     </Card>
   );
 }
-
