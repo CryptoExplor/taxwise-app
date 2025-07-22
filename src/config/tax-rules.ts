@@ -1,4 +1,3 @@
-
 /**
  * Defines the tax rules (slabs, cess, and rebate) for different assessment years
  * and tax regimes (Old and New). This configuration is essential for accurate tax computation.
@@ -27,6 +26,9 @@ export const taxRules = {
       rebate87A: { limit: 500000, maxRebate: 12500 },
       cessRate: 0.04,
       presumptiveAllowed: true,
+      ltcgRate: 0.10,
+      stcgRate: 0.15,
+      ltcgExemption: 100000,
     },
     new: {
       slabs: [
@@ -41,6 +43,9 @@ export const taxRules = {
       rebate87A: { limit: 500000, maxRebate: 12500 },
       cessRate: 0.04,
       presumptiveAllowed: true,
+      ltcgRate: 0.10,
+      stcgRate: 0.15,
+      ltcgExemption: 100000,
     },
   },
   "2023-24": {
@@ -65,6 +70,9 @@ export const taxRules = {
       rebate87A: { limit: 500000, maxRebate: 12500 },
       cessRate: 0.04,
       presumptiveAllowed: true,
+      ltcgRate: 0.10,
+      stcgRate: 0.15,
+      ltcgExemption: 100000,
     },
     new: {
        slabs: [
@@ -78,6 +86,9 @@ export const taxRules = {
       rebate87A: { limit: 700000, maxRebate: 25000 },
       cessRate: 0.04,
       presumptiveAllowed: true,
+      ltcgRate: 0.10,
+      stcgRate: 0.15,
+      ltcgExemption: 100000,
     },
   },
   "2024-25": {
@@ -102,6 +113,9 @@ export const taxRules = {
       rebate87A: { limit: 500000, maxRebate: 12500 },
       cessRate: 0.04,
       presumptiveAllowed: true,
+      ltcgRate: 0.10,
+      stcgRate: 0.20,
+      ltcgExemption: 100000,
     },
     new: {
       slabs: [
@@ -115,6 +129,9 @@ export const taxRules = {
       rebate87A: { limit: 700000, maxRebate: 25000 },
       cessRate: 0.04,
       presumptiveAllowed: true,
+      ltcgRate: 0.10,
+      stcgRate: 0.20,
+      ltcgExemption: 100000,
     },
   },
   "2025-26": {
@@ -139,6 +156,9 @@ export const taxRules = {
       rebate87A: { limit: 500000, maxRebate: 12500 },
       cessRate: 0.04,
       presumptiveAllowed: true,
+      ltcgRate: 0.125,
+      stcgRate: 0.20,
+      ltcgExemption: 125000,
     },
     new: {
       slabs: [
@@ -152,6 +172,9 @@ export const taxRules = {
       rebate87A: { limit: 700000, maxRebate: 25000 },
       cessRate: 0.04,
       presumptiveAllowed: true,
+      ltcgRate: 0.125,
+      stcgRate: 0.20,
+      ltcgExemption: 125000,
     },
   },
   "2026-27": {
@@ -176,6 +199,9 @@ export const taxRules = {
       rebate87A: { limit: 500000, maxRebate: 12500 },
       cessRate: 0.04,
       presumptiveAllowed: true,
+      ltcgRate: 0.125,
+      stcgRate: 0.20,
+      ltcgExemption: 125000,
     },
     new: {
       slabs: [
@@ -189,6 +215,9 @@ export const taxRules = {
       rebate87A: { limit: 1200000, maxRebate: 30000 },
       cessRate: 0.04,
       presumptiveAllowed: true,
+      ltcgRate: 0.125,
+      stcgRate: 0.20,
+      ltcgExemption: 125000,
     },
   },
 };

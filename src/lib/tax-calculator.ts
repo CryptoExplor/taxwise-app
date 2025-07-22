@@ -1,13 +1,5 @@
-
 import type { TaxComputationResult, TaxSlab, IncomeDetails } from './types';
 import { taxRules } from '../config/tax-rules';
-
-// Note: This is a simplified tax calculator.
-// It does not cover all edge cases and complexities of the Indian Income Tax Act.
-// Rates for LTCG/STCG are simplified here.
-const LTCG_TAX_RATE = 0.10; // Assuming LTCG under 112A > 1L is 10%
-const STCG_TAX_RATE = 0.15; // Assuming STCG under 111A is 15%
-
 
 export function computeTax(
   taxableIncome: number,
@@ -35,10 +27,10 @@ export function computeTax(
   const stcg = incomeDetails.capitalGains.shortTerm > 0 ? incomeDetails.capitalGains.shortTerm : 0;
   const ltcg = incomeDetails.capitalGains.longTerm > 0 ? incomeDetails.capitalGains.longTerm : 0;
 
-  const taxOnSTCG = stcg * STCG_TAX_RATE;
-  // For LTCG, tax is on amount exceeding 1 Lakh
-  const taxableLTCG = Math.max(0, ltcg - 100000); 
-  const taxOnLTCG = taxableLTCG * LTCG_TAX_RATE;
+  const taxOnSTCG = stcg * rule.stcgRate;
+  // For LTCG, tax is on amount exceeding the exemption
+  const taxableLTCG = Math.max(0, ltcg - rule.ltcgExemption); 
+  const taxOnLTCG = taxableLTCG * rule.ltcgRate;
   
   // 2. Calculate tax on the remaining "normal" income
   const taxableIncomeNormal = Math.max(0, taxableIncome - stcg - ltcg);
