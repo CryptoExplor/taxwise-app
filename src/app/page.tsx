@@ -12,7 +12,7 @@ import { getTaxAnalysis } from '@/ai/flows/tax-analysis-flow';
 import { v4 as uuidv4 } from 'uuid';
 
 import { Upload, FileText, BarChart as BarChartIconLucide, Users, Search, Plus, Trash2, Edit, Download, Lightbulb, RefreshCw, Loader2 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { BarChart } from '@/components/ui/bar-chart';
 
 const UploadIcon = Upload;
 const FileTextIcon = FileText;
@@ -25,20 +25,6 @@ const EditIcon = Edit;
 const DownloadIcon = Download;
 const LightbulbIcon = Lightbulb;
 const RefreshCwIcon = RefreshCw;
-
-
-const BarChartComponent = ({ data }: { data: { name: string, value: number }[] }) => (
-    <ResponsiveContainer width="100%" height={300}>
-        <BarChart data={data} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="name" />
-            <YAxis />
-            <Tooltip />
-            <Legend />
-            <Bar dataKey="value" fill="#8884d8" name="Tax" />
-        </BarChart>
-    </ResponsiveContainer>
-);
 
 
 // --- Confirmation Modal Component ---
@@ -953,47 +939,9 @@ export default function Home() {
 
     return (
         <div className="min-h-screen bg-gray-100 dark:bg-gray-950 text-gray-800 dark:text-gray-200">
-            <div className="flex flex-col lg:flex-row">
-                {/* Sidebar Navigation */}
-                <aside className="w-full lg:w-64 bg-white dark:bg-gray-900 lg:min-h-screen p-4 shadow-lg lg:shadow-md border-b lg:border-r border-gray-200 dark:border-gray-800">
-                    <div className="text-2xl font-bold text-blue-600 dark:text-blue-400 mb-6 text-center">TaxWise</div>
-                    <nav>
-                        <ul className="space-y-2">
-                            <li>
-                                <button
-                                    onClick={() => setActiveTab('dashboard')}
-                                    className={`w-full flex items-center p-3 rounded-md text-left transition-colors duration-200 ${activeTab === 'dashboard' ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200 font-semibold' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}`}
-                                >
-                                    <UsersIcon className="mr-3" />
-                                    Dashboard
-                                </button>
-                            </li>
-                            <li>
-                                <button
-                                    onClick={() => setActiveTab('upload')}
-                                    className={`w-full flex items-center p-3 rounded-md text-left transition-colors duration-200 ${activeTab === 'upload' ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200 font-semibold' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}`}
-                                >
-                                    <UploadIcon className="mr-3" />
-                                    Upload ITR
-                                </button>
-                            </li>
-                            {currentClient && (activeTab === 'manual' || activeTab === 'computation') && (
-                                <li>
-                                    <button
-                                        onClick={() => setActiveTab('computation')}
-                                        className={`w-full flex items-center p-3 rounded-md text-left transition-colors duration-200 ${activeTab === 'computation' ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200 font-semibold' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}`}
-                                    >
-                                        <BarChartIcon className="mr-3" />
-                                        Computation
-                                    </button>
-                                </li>
-                            )}
-                        </ul>
-                    </nav>
-                </aside>
-
+             <div className="flex flex-col lg:flex-row">
                 {/* Main Content Area */}
-                <main className="flex-1 p-6">
+                <div className="p-6 w-full">
                     {activeTab === 'dashboard' && <Dashboard />}
                     {activeTab === 'upload' && <ITRUpload />}
                     {activeTab === 'manual' && (
@@ -1019,7 +967,7 @@ export default function Home() {
                             onGetAiInsights={getAiTaxInsightsHandler}
                         />
                     )}
-                </main>
+                </div>
             </div>
             <ConfirmationModal
                 isOpen={showConfirmModal}
