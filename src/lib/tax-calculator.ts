@@ -1,5 +1,5 @@
 
-import type { IncomeData, DeductionData, CapitalGainsTransaction } from './types';
+import type { ClientData, CapitalGainsTransaction } from './types';
 
 export const calculateCapitalGainsTax = (transactions: CapitalGainsTransaction[] = []) => {
     let totalSTCG111A = 0; 
@@ -66,7 +66,13 @@ export const calculateCapitalGainsTax = (transactions: CapitalGainsTransaction[]
     return Math.round(capitalGainsTax);
 };
 
-export const computeTax = (incomeData: IncomeData, deductions: DeductionData, regime: 'old' | 'new', capitalGainsTransactions: CapitalGainsTransaction[] = [], dob: string | null = null): number => {
+const computeRegimeTax = (
+    incomeData: ClientData['incomeDetails'], 
+    deductions: ClientData['deductions'], 
+    regime: 'old' | 'new', 
+    capitalGainsTransactions: CapitalGainsTransaction[] = [], 
+    dob: string | null = null
+): number => {
     let incomeFromSalary = incomeData.salary || 0;
     let incomeFromInterest = incomeData.interestIncome || 0;
     let incomeFromOtherSources = incomeData.otherIncome || 0;
@@ -130,7 +136,7 @@ export const computeTax = (incomeData: IncomeData, deductions: DeductionData, re
         }
 
         if (taxableIncome <= 500000) {
-            taxPayable = 0; // Rebate u/s 87A makes it zero
+            taxPayable = Math.max(0, taxPayable - 12500); // Rebate u/s 87A
         }
 
     } else { // New Regime
@@ -156,19 +162,24 @@ export const computeTax = (incomeData: IncomeData, deductions: DeductionData, re
     // Surcharge
     let surcharge = 0;
     if (grossTotalIncome > 5000000) {
-        if (grossTotalIncome <= 10000000) surcharge = totalTaxBeforeCess * 0.10;
-        else if (grossTotalIncome <= 20000000) surcharge = totalTaxBeforeCess * 0.15;
-        else if (grossTotalIncome <= 50000000) surcharge = totalTaxBeforeCess * 0.25;
-        else surcharge = totalTaxBeforeCess * 0.37;
+        let currentSurchargeRate = 0;
+        let threshold = 0;
+        if (grossTotalIncome <= 10000000) { currentSurchargeRate = 0.10; threshold = 5000000; }
+        else if (grossTotalIncome <= 20000000) { currentSurchargeRate = 0.15; threshold = 10000000; }
+        else if (grossTotalIncome <= 50000000) { currentSurchargeRate = 0.25; threshold = 20000000; }
+        else { currentSurchargeRate = 0.37; threshold = 50000000; }
+
+        surcharge = totalTaxBeforeCess * currentSurchargeRate;
         
         // Simplified Marginal Relief
-        const taxOnThreshold = computeTax(
-            {...incomeData, salary: 5000000 - (grossTotalIncome - incomeData.salary)}, 
-            deductions, regime, capitalGainsTransactions, dob
-        );
-        const incomeExceeding = grossTotalIncome - 5000000;
-        if ((totalTaxBeforeCess + surcharge) > (taxOnThreshold + incomeExceeding)) {
-            surcharge = (taxOnThreshold + incomeExceeding) - totalTaxBeforeCess;
+        const taxOnThresholdIncome = grossTotalIncome - (grossTotalIncome - threshold);
+        const taxOnThreshold = computeRegimeTax({...incomeData, salary: incomeData.salary - (grossTotalIncome - threshold)}, deductions, regime, capitalGainsTransactions, dob);
+        
+        const incomeAboveThreshold = grossTotalIncome - threshold;
+        const taxIncrease = totalTaxBeforeCess + surcharge - taxOnThreshold;
+
+        if (taxIncrease > incomeAboveThreshold) {
+            surcharge = taxOnThreshold + incomeAboveThreshold - totalTaxBeforeCess;
         }
     }
     
@@ -177,4 +188,10 @@ export const computeTax = (incomeData: IncomeData, deductions: DeductionData, re
     const cess = totalTaxBeforeCess * 0.04;
     
     return Math.round(totalTaxBeforeCess + cess);
+};
+
+export const computeTax = (client: ClientData): { taxOldRegime: number, taxNewRegime: number } => {
+    const taxOldRegime = computeRegimeTax(client.incomeDetails, client.deductions, 'old', client.capitalGainsTransactions, client.personalInfo.dob);
+    const taxNewRegime = computeRegimeTax(client.incomeDetails, client.deductions, 'new', client.capitalGainsTransactions, client.personalInfo.dob);
+    return { taxOldRegime, taxNewRegime };
 };
