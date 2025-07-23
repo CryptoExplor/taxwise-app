@@ -124,7 +124,7 @@ export default function Home() {
     // Load clients when auth is ready and userId is available
     useEffect(() => {
         if (isAuthReady && currentUser?.uid && db && Object.keys(db).length > 0) {
-            const clientsCollectionRef = collection(db, `artifacts/${appId}/users/${currentUser.uid}/clients`);
+            const clientsCollectionRef = collection(db, `users/${currentUser.uid}/clients`);
             const unsubscribe = onSnapshot(clientsCollectionRef, (snapshot) => {
                 const fetchedClients = snapshot.docs.map(doc => ({
                     id: doc.id,
@@ -152,20 +152,23 @@ export default function Home() {
             // Recompute taxes before saving to ensure latest values
             const oldTax = computeTax(clientData.income!, clientData.deductions!, 'old', clientData.capitalGainsTransactions, clientData.dob);
             const newTax = computeTax(clientData.income!, clientData.deductions!, 'new', clientData.capitalGainsTransactions, clientData.dob);
-            const {id, ...dataToSave} = {
+            
+            const dataToSave = {
                 ...clientData,
                 taxOldRegime: oldTax,
                 taxNewRegime: newTax,
             };
+            
+            delete dataToSave.id; // remove id before saving to firestore
 
             if (clientData.id) {
                 // Update existing client
-                const clientDocRef = doc(db, `artifacts/${appId}/users/${currentUser.uid}/clients`, clientData.id);
+                const clientDocRef = doc(db, `users/${currentUser.uid}/clients`, clientData.id);
                 await updateDoc(clientDocRef, dataToSave);
                 setMessage("Client updated successfully!");
             } else {
                 // Add new client
-                const clientsCollectionRef = collection(db, `artifacts/${appId}/users/${currentUser.uid}/clients`);
+                const clientsCollectionRef = collection(db, `users/${currentUser.uid}/clients`);
                 await addDoc(clientsCollectionRef, dataToSave);
                 setMessage("Client added successfully!");
             }
@@ -195,7 +198,7 @@ export default function Home() {
         setLoading(true);
         setMessage('');
         try {
-            const clientDocRef = doc(db, `artifacts/${appId}/users/${currentUser.uid}/clients`, clientToDeleteId);
+            const clientDocRef = doc(db, `users/${currentUser.uid}/clients`, clientToDeleteId);
             await deleteDoc(clientDocRef);
             setMessage("Client deleted successfully!");
             if (currentClient && currentClient.id === clientToDeleteId) {
@@ -444,7 +447,7 @@ export default function Home() {
     const Dashboard = () => {
         const filteredClients = clients.filter(client =>
             client.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            client.pan.toLowerCase().includes(searchTerm.toLowerCase())
+            (client.pan && client.pan.toLowerCase().includes(searchTerm.toLowerCase()))
         );
 
         return (
@@ -820,7 +823,7 @@ export default function Home() {
                 </p>
 
                 <div className="mb-6">
-                    <BarChartComponent data={taxData} />
+                    <BarChart data={taxData} />
                 </div>
 
                 {/* What-If Analysis Section */}
@@ -1027,5 +1030,3 @@ export default function Home() {
         </div>
     );
 };
-
-export default App;
