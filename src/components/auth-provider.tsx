@@ -5,7 +5,7 @@ import { createContext, useContext, useEffect, useState, useCallback } from 'rea
 import { onAuthStateChanged, type User, signInAnonymously } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
 import { usePathname, useRouter } from 'next/navigation';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 interface UserProfile {
     email: string;
@@ -27,33 +27,26 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
+  const pathname = usePathname();
   
-  // Effect for handling authentication state changes
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser) {
-        setUser(currentUser);
-      } else {
-        try {
-          const userCredential = await signInAnonymously(auth);
-          setUser(userCredential.user);
-        } catch (error) {
-          console.error("Anonymous sign-in failed:", error);
-        }
-      }
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, []);
-
-  // Effect for fetching user profile data when user is authenticated
-  const fetchUserProfile = useCallback(async () => {
-    if (user && !user.isAnonymous) { // Only fetch profile for non-anonymous users
-      const userDocRef = doc(db, 'users', user.uid);
+  const fetchUserProfile = useCallback(async (userToFetch: User) => {
+    if (userToFetch && !userToFetch.isAnonymous) {
+      const userDocRef = doc(db, 'users', userToFetch.uid);
       try {
         const userDoc = await getDoc(userDocRef);
         if (userDoc.exists()) {
           setUserProfile(userDoc.data() as UserProfile);
+        } else {
+            await setDoc(userDocRef, {
+                email: userToFetch.email,
+                name: userToFetch.displayName,
+                plan: 'free',
+                createdAt: new Date(),
+                usage: { clients: 0, reports: 0 },
+            });
+            const newUserDoc = await getDoc(userDocRef);
+            setUserProfile(newUserDoc.data() as UserProfile);
         }
       } catch (error) {
         console.error("Failed to fetch user profile:", error);
@@ -62,18 +55,34 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     } else {
       setUserProfile(null);
     }
-  }, [user]);
-
+  }, []);
+  
   useEffect(() => {
-    fetchUserProfile();
-  }, [fetchUserProfile]);
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        setUser(currentUser);
+        await fetchUserProfile(currentUser);
+        if(pathname.startsWith('/login')) {
+            router.push('/');
+        }
+      } else {
+        setUser(null);
+        setUserProfile(null);
+        if (!pathname.startsWith('/login')) {
+             router.push('/login');
+        }
+      }
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, [fetchUserProfile, pathname, router]);
 
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-950 text-gray-800 dark:text-gray-200">
+      <div className="flex items-center justify-center min-h-screen bg-muted/20 text-foreground">
           <div className="flex flex-col items-center">
-              <svg className="animate-spin h-10 w-10 text-blue-600 dark:text-blue-400 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <svg className="animate-spin h-10 w-10 text-primary mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
