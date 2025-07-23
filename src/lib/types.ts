@@ -1,47 +1,65 @@
 
-export interface CapitalGainsTransaction {
-    id: string;
-    assetType: 'equity_listed' | 'property' | 'unlisted_shares' | 'other';
-    purchaseDate: string;
-    saleDate: string;
-    purchasePrice: number;
-    salePrice: number;
-    expenses: number;
-    fmv2018: number;
+export interface IncomeDetails {
+  salary: number;
+  houseProperty: number;
+  businessIncome: number;
+  capitalGains: {
+    shortTerm: number;
+    longTerm: number;
+  };
+  otherSources: number;
+  grossTotalIncome: number;
 }
 
-export interface IncomeData {
-    salary: number;
-    interestIncome: number;
-    otherIncome: number;
-    capitalGains: number; // Placeholder for aggregate from JSON
-    businessIncome: number;
-    speculationIncome: number;
-    fnoIncome: number;
+export interface Deductions {
+  section80C: number;
+  section80D: number;
+  section80G: number;
+  totalDeductions: number;
 }
 
-export interface DeductionData {
-    section80C: number;
-    section80CCD1B: number;
-    section80CCD2: number;
-    section80D: number;
-    section80TTA: number;
-    section80TTB: number;
-    section80G: number;
-    section24B: number;
+export interface TaxComputation {
+  taxOnIncome: number;
+  cess: number;
+  totalTaxLiability: number;
 }
+
+export interface TaxPaid {
+  tdsSalary: number;
+  tdsOthers: number;
+  advanceTax: number;
+  selfAssessmentTax: number;
+  totalTaxPaid: number;
+}
+
+export interface FinalSettlement {
+  taxLiability: number;
+  taxPaid: number;
+  refundDue: number;
+  taxPayable: number;
+}
+
 
 export interface ClientData {
-    id: string | null;
-    createdAt: string;
-    clientName: string;
-    pan: string;
-    dob: string;
-    address: string;
-    itrFormType: string;
-    income: IncomeData;
-    deductions: DeductionData;
-    capitalGainsTransactions: CapitalGainsTransaction[];
-    taxOldRegime?: number;
-    taxNewRegime?: number;
+  id?: string;
+  createdAt: string;
+  // Basic Metadata
+  clientName: string;
+  pan: string;
+  assessmentYear: string;
+  filingStatus: string;
+  
+  // Computed Data
+  incomeDetails: IncomeDetails;
+  deductions: Deductions;
+  netTaxableIncome: number;
+  taxRegime: 'Old Regime' | 'New Regime';
+  taxComputation: TaxComputation;
+  taxPaid: TaxPaid;
+  finalSettlement: FinalSettlement;
+  
+  // App-specific data
+  notes: string;
+  uploadedBy: string;
+  jsonRef?: string; // Link to the original file in Firebase Storage
 }

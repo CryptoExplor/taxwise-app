@@ -1,166 +1,102 @@
 
-import type { ClientData } from './types';
+import type { ClientData, IncomeDetails, Deductions, TaxComputation, TaxPaid, FinalSettlement } from './types';
 
-export const parseITRJson = (fileContent: string): Omit<ClientData, 'id' | 'createdAt' | 'taxOldRegime' | 'taxNewRegime' | 'capitalGainsTransactions'> => {
+function safeNum(value: any): number {
+    return Number(value) || 0;
+}
+
+export const parseITRJson = (fileContent: string, currentUserEmail: string): Omit<ClientData, 'id'> => {
     try {
         const data = JSON.parse(fileContent);
-        let parsedData: Omit<ClientData, 'id' | 'createdAt' | 'taxOldRegime' | 'taxNewRegime' | 'capitalGainsTransactions'> & {capitalGainsTransactions?: any[]} = {
-            clientName: "Unknown",
-            pan: "N/A",
-            dob: "N/A",
-            address: "N/A",
-            itrFormType: "Unknown",
-            income: {
-                salary: 0, interestIncome: 0, otherIncome: 0, capitalGains: 0,
-                businessIncome: 0, speculationIncome: 0, fnoIncome: 0,
-            },
-            deductions: {
-                section80C: 0, section80CCD1B: 0, section80CCD2: 0, section80D: 0,
-                section80TTA: 0, section80TTB: 0, section80G: 0, section24B: 0,
-            }
-        };
 
-        if (data.ITR && data.ITR.ITR1) {
-            parsedData.itrFormType = "ITR-1";
-            const itr1 = data.ITR.ITR1;
-            const personalInfo = itr1.PersonalInfo || {};
-            const assesseeName = personalInfo.AssesseeName || {};
-            const address = personalInfo.Address || {};
+        // Find the main ITR object, which might be nested
+        const itrData = data.ITR?.ITR1 || data.ITR?.ITR2 || data.ITR?.ITR3 || data.ITR?.ITR4 || data;
+        const formName = data.ITR ? Object.keys(data.ITR)[0] : "Prefill";
 
-            parsedData.clientName = `${assesseeName.FirstName || ''} ${assesseeName.SurNameOrOrgName || ''}`.trim();
-            parsedData.pan = personalInfo.PAN || "N/A";
-            parsedData.dob = personalInfo.DOB || "N/A";
-            parsedData.address = `${address.ResidenceNo || ''}, ${address.RoadOrStreet || ''}, ${address.LocalityOrArea || ''}, ${address.CityOrTownOrDistrict || ''}, ${address.PinCode || ''}`.trim();
+        // --- 1. Basic Client Metadata ---
+        const personalInfo = itrData.PersonalInfo || itrData.PartA_GEN1?.PersonalInfo || {};
+        const assesseeName = personalInfo.AssesseeName || {};
+        const filingStatus = itrData.FilingStatus || itrData.PartA_GEN1?.FilingStatus || {};
+        const partB_TTI = itrData['PartB-TTI'] || {};
 
-            const totalIncome = itr1.TotalIncome || {};
-            const incFromOS = totalIncome.IncFromOS || {};
-            const deductChapVIA = itr1.DeductUndChapVIA || {};
-            
-            parsedData.income.salary = totalIncome.Salaries || 0;
-            parsedData.income.interestIncome = incFromOS.OtherSrcThanOwnRaceHorse || 0;
-            parsedData.income.otherIncome = incFromOS.TotIncFromOS || 0;
+        const name = `${assesseeName.FirstName || ''} ${assesseeName.MiddleName || ''} ${assesseeName.SurNameOrOrgName || ''}`.trim();
+        const pan = personalInfo.PAN || 'N/A';
+        const assessmentYear = itrData.AssessmentYear || '2024-25';
+        const status = filingStatus.ReturnFileSec || 'N/A';
 
-            parsedData.deductions.section80C = deductChapVIA.Section80C || 0;
-            parsedData.deductions.section80D = deductChapVIA.Section80D || 0;
-            parsedData.deductions.section80TTA = deductChapVIA.Section80TTA || 0;
-            parsedData.deductions.section80TTB = deductChapVIA.Section80TTB || 0;
-            parsedData.deductions.section80CCD1B = deductChapVIA.Section80CCD1B || 0;
-            parsedData.deductions.section80CCD2 = deductChapVIA.Section80CCDEmployer || 0;
-            parsedData.deductions.section80G = deductChapVIA.Section80G || 0;
-
-        } else if (data.ITR && data.ITR.ITR2) {
-            parsedData.itrFormType = "ITR-2";
-            const itr2 = data.ITR.ITR2;
-            const personalInfo = itr2.PartA_GEN1?.PersonalInfo || {};
-            const assesseeName = personalInfo.AssesseeName || {};
-            const address = personalInfo.Address || {};
-            
-            parsedData.clientName = `${assesseeName.FirstName || ''} ${assesseeName.MiddleName || ''} ${assesseeName.SurNameOrOrgName || ''}`.trim();
-            parsedData.pan = personalInfo.PAN || "N/A";
-            parsedData.dob = personalInfo.DOB || "N/A";
-            parsedData.address = `${address.ResidenceNo || ''}, ${address.RoadOrStreet || ''}, ${address.LocalityOrArea || ''}, ${address.CityOrTownOrDistrict || ''}, ${address.PinCode || ''}`.trim();
-
-            const partBTI = itr2['PartB-TI'] || {};
-            parsedData.income.salary = partBTI.Salaries || 0;
-            parsedData.income.interestIncome = partBTI.IncFromOS?.OtherSrcThanOwnRaceHorse || 0;
-            parsedData.income.otherIncome = partBTI.IncFromOS?.TotIncFromOS || 0;
-            parsedData.income.capitalGains = partBTI.CapGain?.TotalCapGains || 0;
-            parsedData.deductions.section24B = partBTI.IncomeFromHP || 0;
-
-            const chapVIA = itr2.ScheduleVIA?.DeductUndChapVIA || {};
-            parsedData.deductions.section80C = chapVIA.Section80C || 0;
-            parsedData.deductions.section80D = chapVIA.Section80D || 0;
-            parsedData.deductions.section80TTA = chapVIA.Section80TTA || 0;
-            parsedData.deductions.section80TTB = chapVIA.Section80TTB || 0;
-            parsedData.deductions.section80CCD1B = chapVIA.Section80CCD1B || 0;
-            parsedData.deductions.section80CCD2 = chapVIA.Section80CCDEmployer || 0;
-            parsedData.deductions.section80G = chapVIA.Section80G || 0;
-
-        } else if (data.ITR && data.ITR.ITR3) {
-             parsedData.itrFormType = "ITR-3";
-            const itr3 = data.ITR.ITR3;
-            const personalInfo = itr3.PartA_GEN1?.PersonalInfo || {};
-            const assesseeName = personalInfo.AssesseeName || {};
-            const address = personalInfo.Address || {};
-            
-            parsedData.clientName = `${assesseeName.FirstName || ''} ${assesseeName.MiddleName || ''} ${assesseeName.SurNameOrOrgName || ''}`.trim();
-            parsedData.pan = personalInfo.PAN || "N/A";
-            parsedData.dob = personalInfo.DOB || "N/A";
-            parsedData.address = `${address.ResidenceNo || ''}, ${address.RoadOrStreet || ''}, ${address.LocalityOrArea || ''}, ${address.CityOrTownOrDistrict || ''}, ${address.PinCode || ''}`.trim();
-
-            const partBTI = itr3['PartB-TI'] || {};
-            parsedData.income.salary = partBTI.Salaries || 0;
-            parsedData.income.businessIncome = partBTI.IncomeFromBusinessProf || 0;
-            parsedData.income.capitalGains = partBTI.CapGain?.TotalCapGains || 0;
-            parsedData.income.interestIncome = partBTI.IncFromOS?.OtherSrcThanOwnRaceHorse || 0;
-            parsedData.income.otherIncome = partBTI.IncFromOS?.TotIncFromOS || 0;
-            parsedData.deductions.section24B = partBTI.IncomeFromHP || 0;
-            
-            const chapVIA = itr3.ScheduleVIA?.DeductUndChapVIA || {};
-            parsedData.deductions.section80C = chapVIA.Section80C || 0;
-            parsedData.deductions.section80D = chapVIA.Section80D || 0;
-            parsedData.deductions.section80TTA = chapVIA.Section80TTA || 0;
-            parsedData.deductions.section80TTB = chapVIA.Section80TTB || 0;
-            parsedData.deductions.section80CCD1B = chapVIA.Section80CCD1B || 0;
-            parsedData.deductions.section80CCD2 = chapVIA.Section80CCDEmployer || 0;
-            parsedData.deductions.section80G = chapVIA.Section80G || 0;
-
-        } else if (data.ITR && data.ITR.ITR4) {
-             parsedData.itrFormType = "ITR-4";
-            const itr4 = data.ITR.ITR4;
-            const personalInfo = itr4.PersonalInfo || {};
-            const assesseeName = personalInfo.AssesseeName || {};
-            const address = personalInfo.Address || {};
-
-            parsedData.clientName = `${assesseeName.FirstName || ''} ${assesseeName.SurNameOrOrgName || ''}`.trim();
-            parsedData.pan = personalInfo.PAN || "N/A";
-            parsedData.dob = personalInfo.DOB || "N/A";
-            parsedData.address = `${address.ResidenceNo || ''}, ${address.RoadOrStreet || ''}, ${address.LocalityOrArea || ''}, ${address.CityOrTownOrDistrict || ''}, ${address.PinCode || ''}`.trim();
-
-            const totalIncome = itr4.TotalIncome || {};
-            const incFromOS = totalIncome.IncFromOS || {};
-            const deductChapVIA = itr4.DeductUndChapVIA || {};
-            
-            parsedData.income.salary = totalIncome.Salaries || 0;
-            parsedData.income.businessIncome = totalIncome.IncomeFromBusinessProf || 0;
-            parsedData.income.interestIncome = incFromOS.TotIncFromOS || 0;
-            
-            parsedData.deductions.section80C = deductChapVIA.Section80C || 0;
-            parsedData.deductions.section80D = deductChapVIA.Section80D || 0;
-            parsedData.deductions.section80TTA = deductChapVIA.Section80TTA || 0;
-            parsedData.deductions.section80TTB = deductChapVIA.Section80TTB || 0;
-            parsedData.deductions.section80CCD1B = deductChapVIA.Section80CCD1B || 0;
-            parsedData.deductions.section80CCD2 = deductChapVIA.Section80CCDEmployer || 0;
-            parsedData.deductions.section80G = deductChapVIA.Section80G || 0;
-
-        } else if (data.personalInfo?.pan) {
-            parsedData.itrFormType = "Prefill";
-            const pInfo = data.personalInfo;
-            const assesseeName = pInfo.assesseeName || {};
-            const address = pInfo.address || {};
-            const insights = data.insights || {};
-            const userDeduct = insights.UsrDeductUndChapVIAType || {};
-
-            parsedData.clientName = `${assesseeName.firstName || ''} ${assesseeName.middleName || ''} ${assesseeName.surNameOrOrgName || ''}`.trim();
-            parsedData.pan = pInfo.pan || "N/A";
-            parsedData.dob = pInfo.dob || "N/A";
-            parsedData.address = `${address.residenceNo || ''}, ${address.roadOrStreet || ''}, ${address.localityOrArea || ''}, ${address.cityOrTownOrDistrict || ''}, ${address.zipCode || ''}`.trim();
-            
-            parsedData.income.interestIncome = (insights.intrstFrmSavingBank || 0) + (insights.intrstFrmTermDeposit || 0);
-            parsedData.income.otherIncome = insights.scheduleOS?.incOthThanOwnRaceHorse?.intrstFrmOthers || 0;
-            parsedData.deductions.section80TTB = userDeduct.Section80TTB || 0;
-        }
-
-        // Initialize empty transactions array
-        const finalData: Omit<ClientData, 'id' | 'createdAt' | 'taxOldRegime' | 'taxNewRegime'> = {
-            ...parsedData,
-            capitalGainsTransactions: []
-        };
+        // --- 2. Income Computation ---
+        const incomeSources = itrData.PartB_TI || {};
+        const scheduleCG = itrData.ScheduleCG || {};
         
-        return finalData;
+        const incomeDetails: IncomeDetails = {
+            salary: safeNum(incomeSources.Salaries),
+            houseProperty: safeNum(incomeSources.IncomeFromHP),
+            businessIncome: safeNum(incomeSources.IncomeFromBusinessProf),
+            capitalGains: {
+                shortTerm: safeNum(scheduleCG.ShortTermCapGain?.TotalShortTermCapGain),
+                longTerm: safeNum(scheduleCG.LongTermCapGain?.TotalLongTermCapGain),
+            },
+            otherSources: safeNum(incomeSources.IncFromOS),
+            grossTotalIncome: safeNum(incomeSources.GrossTotalIncome),
+        };
+
+        // --- 3. Deductions ---
+        const scheduleVIA = itrData.ScheduleVIA?.DeductUndChapVIA || {};
+        const deductions: Deductions = {
+            section80C: safeNum(scheduleVIA.Section80C),
+            section80D: safeNum(scheduleVIA.Section80D),
+            section80G: safeNum(scheduleVIA.Section80G),
+            totalDeductions: safeNum(itrData.PartB_TI?.TotalDeductUndChapVIA),
+        };
+
+        // --- 4. Net Computation ---
+        const netTaxableIncome = safeNum(itrData.PartB_TI?.TotalIncome);
+        const taxComputation: TaxComputation = {
+            taxOnIncome: safeNum(partB_TTI.TaxPayableOnTI),
+            cess: safeNum(partB_TTI.HealthEduCess),
+            totalTaxLiability: safeNum(partB_TTI.NetTaxLiability),
+        };
+
+        // --- 5. Tax Paid ---
+        const taxesPaidDetails = partB_TTI.TaxPaid || {};
+        const taxPaid: TaxPaid = {
+            tdsSalary: safeNum(taxesPaidDetails.TDS?.TotalTDS), // Simplified
+            tdsOthers: 0, // Needs more specific parsing from TDS schedules
+            advanceTax: safeNum(taxesPaidDetails.AdvanceTax),
+            selfAssessmentTax: safeNum(taxesPaidDetails.SelfAssessmentTax),
+            totalTaxPaid: safeNum(taxesPaidDetails.TotalTaxesPaid),
+        };
+
+        // --- 6. Refund / Payable ---
+        const finalSettlement: FinalSettlement = {
+            taxLiability: taxComputation.totalTaxLiability,
+            taxPaid: taxPaid.totalTaxPaid,
+            refundDue: safeNum(partB_TTI.Refund),
+            taxPayable: safeNum(partB_TTI.NetTaxPayable),
+        };
+
+        // --- 7. Assemble Final Client Object ---
+        const clientData: Omit<ClientData, 'id'> = {
+            clientName: name,
+            pan: pan,
+            assessmentYear: assessmentYear,
+            filingStatus: status,
+            incomeDetails: incomeDetails,
+            deductions: deductions,
+            netTaxableIncome: netTaxableIncome,
+            taxRegime: 'Old Regime', // Default, needs logic to detect from JSON
+            taxComputation: taxComputation,
+            taxPaid: taxPaid,
+            finalSettlement: finalSettlement,
+            notes: "",
+            uploadedBy: currentUserEmail,
+            createdAt: new Date().toISOString(),
+        };
+
+        return clientData;
 
     } catch (error) {
-        console.error("Error parsing JSON:", error);
-        throw new Error("Invalid JSON file or unsupported format.");
+        console.error("Error parsing ITR JSON:", error);
+        throw new Error("Invalid or unsupported ITR JSON file format.");
     }
 };
