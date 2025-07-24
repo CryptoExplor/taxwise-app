@@ -11,7 +11,7 @@ export const calculateCapitalGainsTax = (transactions: CapitalGainsTransaction[]
     const rules = taxRules[assessmentYear as keyof typeof taxRules]?.old; // CG rates are same for both regimes in our config
     if (!rules) {
         console.warn(`No tax rules found for AY ${assessmentYear}. Defaulting to 2025-26.`);
-        return 0;
+        return { taxOnSpecialRates: 0, stcgAtSlabRates: 0 };
     }
 
     transactions.forEach(tx => {
@@ -41,7 +41,9 @@ export const calculateCapitalGainsTax = (transactions: CapitalGainsTransaction[]
                 totalLTCG112A += gain;
             }
         } else if (tx.assetType === 'property' || tx.assetType === 'unlisted_shares') {
-            if (holdingPeriodDays <= 730) {
+             // For simplicity, property/unlisted gains are treated as other gains here.
+             // Proper indexation would be needed for a full implementation.
+            if (holdingPeriodDays <= 730) { 
                 totalOtherSTCG += gain;
             } else {
                 totalOtherLTCG += gain;
@@ -66,27 +68,21 @@ export const calculateCapitalGainsTax = (transactions: CapitalGainsTransaction[]
     // Other LTCG (e.g., from property, unlisted shares) taxed at a flat rate (simplified)
     capitalGainsTax += totalOtherLTCG * rules.ltcgRate;
     
-    // Note: totalOtherSTCG is taxed at slab rates, so it should be added to normal income.
-    // This function only returns tax on special rate gains. We'll add totalOtherSTCG to income in the main compute function.
-
-    return Math.round(capitalGainsTax);
+    // totalOtherSTCG is taxed at slab rates, so it should be added to normal income.
+    return { taxOnSpecialRates: Math.round(capitalGainsTax), stcgAtSlabRates: totalOtherSTCG };
 };
 
 const calculateSlabTax = (income: number, slabs: { limit: number; rate: number }[]): number => {
     let tax = 0;
-    let remainingIncome = income;
+    let lastLimit = 0;
 
-    for (let i = 0; i < slabs.length; i++) {
-        const slab = slabs[i];
-        const prevSlabLimit = i === 0 ? 0 : slabs[i - 1].limit;
-
-        if (remainingIncome > 0) {
-            const taxableInSlab = Math.min(remainingIncome, slab.limit - prevSlabLimit);
+    for (const slab of slabs) {
+        if (income > lastLimit) {
+            const taxableInSlab = Math.min(income, slab.limit) - lastLimit;
             tax += taxableInSlab * slab.rate;
-            remainingIncome -= taxableInSlab;
         }
-
-        if (remainingIncome <= 0) break;
+        lastLimit = slab.limit;
+        if (income <= slab.limit) break;
     }
 
     return tax;
@@ -109,50 +105,46 @@ const computeRegimeTax = (
         return 0; // Or handle as an error
     }
 
-    // Sum up income heads
-    const totalIncomeFromHeads = Object.values(incomeData).reduce((sum, val) => {
-        if (typeof val === 'number') return sum + val;
-        return sum; // ignore nested objects like capitalGains
-    }, 0);
+    const { taxOnSpecialRates, stcgAtSlabRates } = calculateCapitalGainsTax(capitalGainsTransactions, assessmentYear);
 
-    // From capital gains, find the portion taxed at slab rates
-    let stcgAtSlabRates = 0;
-    (capitalGainsTransactions || []).forEach(tx => {
-        if (!tx.purchaseDate || !tx.saleDate) return;
-        const purchaseDate = new Date(tx.purchaseDate);
-        const saleDate = new Date(tx.saleDate);
-        const holdingPeriodDays = (saleDate.getTime() - purchaseDate.getTime()) / (1000 * 60 * 60 * 24);
-        if (tx.assetType !== 'equity_listed' && holdingPeriodDays <= 365) {
-             const gain = tx.salePrice - tx.purchasePrice - (tx.expenses || 0);
-             if(gain > 0) stcgAtSlabRates += gain;
-        }
-    });
+    // Sum up income heads, excluding the special-rate capital gains which are taxed separately.
+    const incomeFromHeads = (incomeData.salary || 0) + 
+                            (incomeData.houseProperty || 0) +
+                            (incomeData.businessIncome || 0) +
+                            (incomeData.otherSources || 0) +
+                            stcgAtSlabRates; // Add STCG taxed at slab rates to the main income pool
 
-    const taxOnSpecialRateCG = calculateCapitalGainsTax(capitalGainsTransactions, assessmentYear);
-    
-    let grossTotalIncome = totalIncomeFromHeads;
-    let taxableIncomeForSlabs = grossTotalIncome;
+    let taxableIncomeForSlabs = incomeFromHeads;
 
-    let age = 30; // Default age
+    let age = 30; // Default age if DOB is not provided
     if (dob) {
-        const birthDate = new Date(dob);
-        const ayEndDate = new Date(`${parseInt(assessmentYear.split('-')[0])}-03-31`);
-        age = ayEndDate.getFullYear() - birthDate.getFullYear();
-        if (ayEndDate.getMonth() < birthDate.getMonth() || (ayEndDate.getMonth() === birthDate.getMonth() && ayEndDate.getDate() < birthDate.getDate())) {
-            age--;
+        try {
+            const birthDate = new Date(dob);
+            // Financial year ends on March 31st of the first year in the AY string (e.g., for AY 2025-26, FY ends March 31, 2025)
+            const ayEndYear = parseInt(assessmentYear.split('-')[0], 10);
+            const financialYearEndDate = new Date(ayEndYear, 2, 31); // Month is 0-indexed, so 2 is March
+            age = financialYearEndDate.getFullYear() - birthDate.getFullYear();
+            const monthDiff = financialYearEndDate.getMonth() - birthDate.getMonth();
+            if (monthDiff < 0 || (monthDiff === 0 && financialYearEndDate.getDate() < birthDate.getDate())) {
+                age--;
+            }
+        } catch(e) {
+            console.error("Invalid date of birth provided:", dob);
         }
     }
 
-    if (incomeData.salary > 0) {
-        taxableIncomeForSlabs -= 50000; // Standard Deduction
+    if (incomeData.salary > 0 && regime === 'new') { // Standard deduction for new regime
+        taxableIncomeForSlabs = Math.max(0, taxableIncomeForSlabs - 50000);
     }
 
     if (regime === 'old') {
-        const totalDeductions = Object.values(deductionsData).reduce((a, b) => a + b, 0);
-        taxableIncomeForSlabs -= totalDeductions;
-    } else {
-        // New regime only allows 80CCD(2) from our list (and standard deduction, already applied)
-        taxableIncomeForSlabs -= (deductionsData.section80CCD2 || 0);
+        let totalDeductions = 0;
+        if (incomeData.salary > 0) {
+             taxableIncomeForSlabs = Math.max(0, taxableIncomeForSlabs - 50000); // Standard deduction for old regime
+        }
+        // Summing up all deductions from the deductions object for the old regime
+        totalDeductions = Object.values(deductionsData).reduce((sum, val) => sum + (val || 0), 0);
+        taxableIncomeForSlabs = Math.max(0, taxableIncomeForSlabs - totalDeductions);
     }
     
     taxableIncomeForSlabs = Math.max(0, taxableIncomeForSlabs);
@@ -163,20 +155,20 @@ const computeRegimeTax = (
         else if (age >= 60 && rules.seniorSlabs) slabsToUse = rules.seniorSlabs;
         else slabsToUse = rules.slabs;
     } else {
-        slabsToUse = rules.slabs;
+        slabsToUse = rules.slabs; // New regime has same slabs for all ages
     }
 
     let taxOnSlabIncome = calculateSlabTax(taxableIncomeForSlabs, slabsToUse);
 
-    // Apply Rebate u/s 87A
-    const totalTaxableIncome = taxableIncomeForSlabs; // Simplified check
-    if (totalTaxableIncome <= rules.rebate87A.limit) {
+    // Apply Rebate u/s 87A on the tax on slab income
+    const totalTaxableIncomeForRebate = taxableIncomeForSlabs;
+    if (totalTaxableIncomeForRebate <= rules.rebate87A.limit) {
         taxOnSlabIncome = Math.max(0, taxOnSlabIncome - rules.rebate87A.maxRebate);
     }
     
-    let totalTaxBeforeCess = taxOnSlabIncome + taxOnSpecialRateCG;
+    let totalTaxBeforeCess = taxOnSlabIncome + taxOnSpecialRates;
 
-    // Surcharge logic can be added here if needed, based on grossTotalIncome
+    // Surcharge logic would be added here if needed
 
     const cess = totalTaxBeforeCess * rules.cessRate;
     
