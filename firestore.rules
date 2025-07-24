@@ -1,28 +1,26 @@
+
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Allow users to read and write only their own data
+    // Combined rule for the users collection
     match /users/{userId} {
-      allow read, update: if request.auth != null && request.auth.uid == userId;
-      allow create: if request.auth != null;
+      // Allow create if user is authenticated
+      allow create: if request.auth.uid != null;
 
-      // Allow users to manage their own clients
-      match /clients/{clientId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
-      }
+      // Allow read, update, delete if:
+      // 1. The user is accessing their own document, OR
+      // 2. The requesting user is an admin.
+      allow read, update, delete: if request.auth.uid == userId || 
+                                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.plan == 'admin';
     }
 
-    // Admin Access Rules
-    match /users/{userId} {
-      // Admins can read/write any user document for management purposes
-      allow read, write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.plan == 'admin';
-      
-       match /clients/{clientId} {
-         // Admins can read/write any client document
-        allow read, write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.plan == 'admin';
-      }
+    // Each user can only read/write their own clients.
+    // An admin implicitly has access via the users collection rule above if needed, but this is more direct for client management by the user.
+    match /users/{userId}/clients/{clientId} {
+      allow read, write: if request.auth.uid == userId ||
+                           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.plan == 'admin';
     }
   }
 }
