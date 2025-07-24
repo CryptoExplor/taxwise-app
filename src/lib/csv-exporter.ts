@@ -1,49 +1,66 @@
 
 import type { ClientData } from './types';
 
-export function exportClientsToCSV(clients: ClientData[]) {
+export function exportClientsToCsv(clients: ClientData[]) {
   if (clients.length === 0) {
-    console.warn("No clients to export to CSV.");
+    alert("No clients to export.");
     return;
   }
 
   const headers = [
-    "Name", "PAN", "Assessment Year", "Tax Regime", "Age",
-    "Gross Total Income", "Total Deductions", "Net Taxable Income",
-    "Tax on Income", "87A Rebate", "Cess", "Total Tax Liability",
-    "Total Tax Paid", "Refund Due", "Tax Payable"
+    "Client Name", "PAN", "Assessment Year", "Tax Regime", "Filing Status",
+    "Salary Income", "House Property Income", "Business Income", "Capital Gains (Total)", "Other Sources Income", "Gross Total Income",
+    "80C", "80D", "80G", "Total Deductions",
+    "Net Taxable Income",
+    "Tax on Income", "Cess", "Total Tax Liability",
+    "TDS Salary", "TDS Others", "Advance Tax", "Self Assessment Tax", "Total Tax Paid",
+    "Refund Due", "Tax Payable"
   ];
 
-  const rows = clients.map(client => [
-    client.personalInfo.name,
-    client.personalInfo.pan,
-    client.personalInfo.assessmentYear,
-    client.taxRegime,
-    client.personalInfo.age,
-    client.incomeDetails.grossTotalIncome?.toLocaleString('en-IN'),
-    client.deductions.totalDeductions?.toLocaleString('en-IN'),
-    client.taxComputation.taxableIncome?.toLocaleString('en-IN'),
-    client.taxComputation.taxBeforeCess?.toLocaleString('en-IN'),
-    client.taxComputation.rebate?.toLocaleString('en-IN'),
-    client.taxComputation.cess?.toLocaleString('en-IN'),
-    client.taxComputation.totalTaxLiability?.toLocaleString('en-IN'),
-    client.taxesPaid.totalTaxPaid?.toLocaleString('en-IN'),
-    client.taxComputation.refund?.toLocaleString('en-IN'),
-    client.taxComputation.netTaxPayable?.toLocaleString('en-IN')
-  ].map(cell => `"${cell ?? ''}"`)); // Handle null/undefined and quote all cells
+  const csvRows = clients.map(client => {
+    const row = [
+      `"${client.clientName}"`,
+      client.pan,
+      client.assessmentYear,
+      client.taxRegime,
+      client.filingStatus,
 
-  let csvContent = headers.map(header => `"${header}"`).join(",") + "\n";
-  csvContent += rows.map(row => row.join(",")).join("\n");
+      client.incomeDetails.salary,
+      client.incomeDetails.houseProperty,
+      client.incomeDetails.businessIncome,
+      client.incomeDetails.capitalGains.shortTerm + client.incomeDetails.capitalGains.longTerm,
+      client.incomeDetails.otherSources,
+      client.incomeDetails.grossTotalIncome,
 
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      client.deductions.section80C,
+      client.deductions.section80D,
+      client.deductions.section80G,
+      client.deductions.totalDeductions,
+
+      client.netTaxableIncome,
+
+      client.taxComputation.taxOnIncome,
+      client.taxComputation.cess,
+      client.taxComputation.totalTaxLiability,
+
+      client.taxPaid.tdsSalary,
+      client.taxPaid.tdsOthers,
+      client.taxPaid.advanceTax,
+      client.taxPaid.selfAssessmentTax,
+      client.taxPaid.totalTaxPaid,
+
+      client.finalSettlement.refundDue,
+      client.finalSettlement.taxPayable,
+    ];
+    return row.join(',');
+  });
+
+  const csvString = [headers.join(','), ...csvRows].join('\n');
+  const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
-  
-  const url = URL.createObjectURL(blob);
-  link.setAttribute('href', url);
-  link.setAttribute('download', 'TaxWise_Clients_Summary.csv');
-  link.style.visibility = 'hidden';
+  link.href = URL.createObjectURL(blob);
+  link.setAttribute('download', 'taxwise_clients_summary.csv');
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  URL.revokeObjectURL(url);
 }

@@ -7,7 +7,8 @@ import { db, auth as firebaseAuth, appId } from '@/lib/firebase';
 import type { ClientData } from '@/lib/types';
 import { computeTax, calculateCapitalGainsTax } from '@/lib/tax-calculator';
 import { parseITRJson } from '@/lib/itr-parser';
-import { generatePdfReport, exportClientsToCsv } from '@/lib/pdf-exporter';
+import { generatePdfReport } from '@/lib/pdf-exporter';
+import { exportClientsToCsv } from '@/lib/csv-exporter';
 import { getTaxAnalysis } from '@/ai/flows/tax-analysis-flow';
 import { v4 as uuidv4 } from 'uuid';
 
