@@ -1,20 +1,22 @@
+
 "use client";
 
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { AppProvider, useAppContext } from "@/context/app-context";
 import { AuthProvider, useAuth } from "@/components/auth-provider";
-import { BarChart, Users, Upload, LogOut, User, Sun, Moon, Settings, FileText, Calculator, Landmark } from "lucide-react";
+import { BarChart, Users, Upload, LogOut, User, Sun, Moon, Settings, FileText, Calculator, Landmark, ShieldCheck } from "lucide-react";
 import { AppInitializer } from "@/components/app-initializer";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { auth } from "@/lib/firebase";
 
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-body" });
 
 const Header = () => {
-    const { user } = useAuth();
+    const { user, userProfile } = useAuth();
     const router = useRouter();
     const [theme, setTheme] = useState('light');
 
@@ -52,13 +54,18 @@ const Header = () => {
                             <button className="flex items-center gap-2 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
                                 <User className="h-5 w-5" />
                             </button>
-                             <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 hidden group-hover:block">
+                             <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 hidden group-hover:block z-50">
                                 <Link href="/profile" className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
                                     <User className="mr-2 h-4 w-4"/> Profile
                                 </Link>
                                 <Link href="/pricing" className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
                                     <Settings className="mr-2 h-4 w-4"/> Plans
                                 </Link>
+                                {userProfile?.plan === 'admin' && (
+                                    <Link href="/admin/user-plans" className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
+                                        <ShieldCheck className="mr-2 h-4 w-4" /> Admin Panel
+                                    </Link>
+                                )}
                                 <button onClick={handleLogout} className="w-full text-left flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
                                     <LogOut className="mr-2 h-4 w-4" /> Logout
                                 </button>
@@ -132,23 +139,34 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const router = useRouter();
+  const { user, loading } = useAuth();
+  const pathname = usePathname();
+  const isLoginPage = pathname === '/login';
+
+  const shouldShowMainLayout = !isLoginPage && user && !loading;
+
+
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} font-body antialiased bg-background text-foreground`}>
         <AppProvider>
           <AuthProvider>
             <AppInitializer />
-             <div className="flex flex-col h-screen">
-                <Header />
-                <div className="flex flex-1 overflow-hidden">
-                    <Sidebar />
-                    <main className="flex-1 p-6 overflow-y-auto">{children}</main>
+             {shouldShowMainLayout ? (
+                <div className="flex flex-col h-screen">
+                    <Header />
+                    <div className="flex flex-1 overflow-hidden">
+                        <Sidebar />
+                        <main className="flex-1 p-6 overflow-y-auto">{children}</main>
+                    </div>
                 </div>
-            </div>
+             ) : (
+                <main>{children}</main>
+             )}
           </AuthProvider>
         </AppProvider>
       </body>
     </html>
   );
 }
-

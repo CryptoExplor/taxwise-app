@@ -1,3 +1,4 @@
+
 "use client";
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
@@ -30,6 +31,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const pathname = usePathname();
   
   const publicRoutes = ['/login', '/contact', '/pricing', '/calculator'];
+  const isAdminRoute = pathname.startsWith('/admin');
 
   const fetchUserProfile = useCallback(async (userToFetch: User) => {
     if (userToFetch && !userToFetch.isAnonymous) {
@@ -68,14 +70,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       } else {
         setUser(null);
         setUserProfile(null);
-        if (!publicRoutes.some(route => pathname.startsWith(route))) {
+        const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
+        if (!isPublicRoute && !isAdminRoute) {
              router.push('/login');
         }
       }
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [fetchUserProfile, pathname, router]);
+  }, [fetchUserProfile, pathname, router, publicRoutes, isAdminRoute]);
 
 
   if (loading) {
@@ -92,7 +95,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     );
   }
   
-  if (!user && !publicRoutes.some(route => pathname.startsWith(route))) {
+  const isProtectedRoute = !publicRoutes.some(route => pathname.startsWith(route));
+  if (!user && isProtectedRoute) {
       return null;
   }
 
